@@ -1,0 +1,11 @@
+version: 2
+
+models:
+  - name: stg_wardrobe
+    description: "Staging table for wardrobe items from Bronze layer"
+    columns:
+      - name: item_id
+        description: "Primary key"
+        data_tests:
+          - unique
+          - not_null

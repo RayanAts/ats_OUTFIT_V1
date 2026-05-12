@@ -1,0 +1,23 @@
+# Environnement virtuel
+dbt-env/
+
+# Fichiers sensibles
+app/feedback_local/
+app/new_items_local/
+
+# Cache Python
+__pycache__/
+*.pyc
+*.pyo
+
+# dbt
+ats_outfit/target/
+ats_outfit/dbt_packages/
+ats_outfit/logs/
+
+# Streamlit
+app/.streamlit/secrets.toml
+
+# OS
+.DS_Store
+Thumbs.db
