@@ -112,32 +112,52 @@ def run_dbt():
 # ── Étape 4 : Mettre à jour la météo ─────────────────────────────────────────
 def update_weather():
     log("Mise à jour météo...")
-
     import requests as req
     from datetime import datetime
 
-    today  = datetime.today().strftime("%Y-%m-%d")
-    params = {
+    today = datetime.today().strftime("%Y-%m-%d")
+
+    # Température actuelle (temps réel)
+    params_current = {
         "latitude": 48.8566,
         "longitude": 2.3522,
-        "daily": ["temperature_2m_max", "temperature_2m_min",
-                  "precipitation_sum", "windspeed_10m_max", "weathercode"],
+        "current": ["temperature_2m", "weathercode", "precipitation"],
+        "timezone": "Europe/Paris"
+    }
+
+    # Prévisions journalières
+    params_daily = {
+        "latitude": 48.8566,
+        "longitude": 2.3522,
+        "daily": [
+            "temperature_2m_max",
+            "temperature_2m_min",
+            "precipitation_sum",
+            "windspeed_10m_max",
+            "weathercode"
+        ],
         "timezone": "Europe/Paris",
         "forecast_days": 1
     }
 
-    response = req.get("https://api.open-meteo.com/v1/forecast", params=params)
-    raw      = response.json()
+    r_current = req.get("https://api.open-meteo.com/v1/forecast", params=params_current)
+    r_daily   = req.get("https://api.open-meteo.com/v1/forecast", params=params_daily)
+
+    current = r_current.json()["current"]
+    daily   = r_daily.json()["daily"]
 
     weather_record = {
         "fetch_date":        today,
+        "fetch_time":        datetime.today().strftime("%H:%M"),
         "latitude":          48.8566,
         "longitude":         2.3522,
-        "temp_max":          raw["daily"]["temperature_2m_max"][0],
-        "temp_min":          raw["daily"]["temperature_2m_min"][0],
-        "precipitation_mm":  raw["daily"]["precipitation_sum"][0],
-        "windspeed_max_kmh": raw["daily"]["windspeed_10m_max"][0],
-        "weathercode":       raw["daily"]["weathercode"][0]
+        "city":              "Paris",
+        "temp_current":      current["temperature_2m"],
+        "temp_max":          daily["temperature_2m_max"][0],
+        "temp_min":          daily["temperature_2m_min"][0],
+        "precipitation_mm":  daily["precipitation_sum"][0],
+        "windspeed_max_kmh": daily["windspeed_10m_max"][0],
+        "weathercode":       daily["weathercode"][0]
     }
 
     content     = json.dumps(weather_record, indent=2)
@@ -148,7 +168,65 @@ def update_weather():
     file_client = fs_client.get_file_client(remote_path)
     file_client.upload_data(content, overwrite=True)
 
-    log(f"✅ Météo mise à jour : {weather_record['temp_max']}°C / {weather_record['temp_min']}°C")
+    log(f"✅ Météo mise à jour : {weather_record['temp_current']}°C actuellement à Paris")
+
+    import requests as req
+    from datetime import datetime
+
+    today = datetime.today().strftime("%Y-%m-%d")
+
+    # Température actuelle (temps réel)
+    params_current = {
+        "latitude": 48.8566,
+        "longitude": 2.3522,
+        "current": ["temperature_2m", "weathercode", "precipitation"],
+        "timezone": "Europe/Paris"
+    }
+
+    # Prévisions journalières
+    params_daily = {
+        "latitude": 48.8566,
+        "longitude": 2.3522,
+        "daily": [
+            "temperature_2m_max",
+            "temperature_2m_min",
+            "precipitation_sum",
+            "windspeed_10m_max",
+            "weathercode"
+        ],
+        "timezone": "Europe/Paris",
+        "forecast_days": 1
+    }
+
+    r_current = req.get("https://api.open-meteo.com/v1/forecast", params=params_current)
+    r_daily   = req.get("https://api.open-meteo.com/v1/forecast", params=params_daily)
+
+    current = r_current.json()["current"]
+    daily   = r_daily.json()["daily"]
+
+    weather_record = {
+        "fetch_date":        today,
+        "fetch_time":        datetime.today().strftime("%H:%M"),
+        "latitude":          48.8566,
+        "longitude":         2.3522,
+        "city":              "Paris",
+        "temp_current":      current["temperature_2m"],
+        "temp_max":          daily["temperature_2m_max"][0],
+        "temp_min":          daily["temperature_2m_min"][0],
+        "precipitation_mm":  daily["precipitation_sum"][0],
+        "windspeed_max_kmh": daily["windspeed_10m_max"][0],
+        "weathercode":       daily["weathercode"][0]
+    }
+
+    content     = json.dumps(weather_record, indent=2)
+    credential  = AzureCliCredential()
+    client      = DataLakeServiceClient(account_url=ACCOUNT_URL, credential=credential)
+    fs_client   = client.get_file_system_client(WORKSPACE)
+    remote_path = f"{LAKEHOUSE}/Files/bronze/weather/weather_raw_{today}.json"
+    file_client = fs_client.get_file_client(remote_path)
+    file_client.upload_data(content, overwrite=True)
+
+    log(f"✅ Météo mise à jour : {weather_record['temp_current']}°C actuellement à Paris")
 
 # ── Main ──────────────────────────────────────────────────────────────────────
 if __name__ == "__main__":

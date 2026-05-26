@@ -34,10 +34,27 @@ def get_top_recommendations():
     """
     return run_query(query)
 
+
+def get_recommendation_date():
+    query = """
+        SELECT TOP 1
+            recommendation_date
+        FROM dbo.gold_recommendation
+        ORDER BY recommendation_date DESC
+    """
+    result = run_query(query)
+    if len(result) > 0:
+        return str(result.iloc[0]['recommendation_date'])
+    return None
+
+
 def get_weather_context():
     query = """
         SELECT TOP 1
             fetch_date,
+            fetch_time,
+            city,
+            temp_current,
             temp_max,
             temp_min,
             temp_avg,

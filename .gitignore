@@ -2,6 +2,7 @@
 dbt-env/
 
 # Fichiers sensibles
+.env
 app/feedback_local/
 app/new_items_local/
 
