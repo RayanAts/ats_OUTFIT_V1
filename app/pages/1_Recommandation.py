@@ -139,7 +139,28 @@ def generate_avatar_svg(recs_data):
         </div>
     </div>
     """
+# ── Score Vibe ────────────────────────────────────────────────────────────────
+def get_vibe_score(recs_data):
+    NEUTRES = ["Blanc", "Beige", "Gris", "Camel"]
+    FONCES  = ["Noir", "Marine", "Bordeaux", "Marron"]
+    VIFS    = ["Bleu", "Vert", "Rouge", "Kaki"]
 
+    couleurs = [item.get("color", "") for item in recs_data]
+
+    nb_neutres = sum(1 for c in couleurs if c in NEUTRES)
+    nb_fonces  = sum(1 for c in couleurs if c in FONCES)
+    nb_vifs    = sum(1 for c in couleurs if c in VIFS)
+
+    if nb_neutres == 3:
+        return "✅", "Safe"
+    elif nb_neutres == 2:
+        return "👌", "Clean"
+    elif nb_vifs >= 2 and nb_fonces >= 1:
+        return "⚡", "Audacieux"
+    elif nb_vifs == 3:
+        return "⚠️", "Attention"
+    else:
+        return "🔥", "Stylé"
 # ── State ─────────────────────────────────────────────────────────────────────
 if 'feedback_sent' not in st.session_state:
     st.session_state.feedback_sent = False
@@ -204,11 +225,13 @@ temp_display = weather.get('temp_current', weather.get('temp_avg', '?'))
 temp_max     = weather.get('temp_max', '')
 temp_min     = weather.get('temp_min', '')
 
+st.markdown('<div style="display:flex;gap:1rem;margin-bottom:1rem">', unsafe_allow_html=True)
+
 col1, col2 = st.columns(2)
 
 with col1:
     st.markdown(f"""
-    <div class="sw-card" style="text-align:center">
+    <div class="sw-card" style="text-align:center;height:100%;box-sizing:border-box">
         <div style="font-size:1.8rem">{weather_emojis.get(weather['weather_label'], '🌡️')}</div>
         <div class="sw-page-eyebrow" style="margin-top:0.5rem">Météo · Paris</div>
         <div style="font-family:'Syne',sans-serif;font-size:1.6rem;
@@ -223,31 +246,55 @@ with col1:
     """, unsafe_allow_html=True)
 
 with col2:
+    mood_labels = {
+        "bureau":         "Au taf",
+        "réunion_client": "Réunion",
+        "casual":         "Journée libre",
+        "sport":          "On bouge",
+        "soirée":         "Soirée"
+    }
+    mood_label = mood_labels.get(str(calendar['context_type']), calendar['context_label'])
+
     st.markdown(f"""
-    <div class="sw-card" style="text-align:center">
+    <div class="sw-card" style="text-align:center;height:100%;box-sizing:border-box">
         <div style="font-size:1.8rem">{context_emojis.get(calendar['context_label'], '📅')}</div>
-        <div class="sw-page-eyebrow" style="margin-top:0.5rem">Contexte</div>
+        <div class="sw-page-eyebrow" style="margin-top:0.5rem">Mood</div>
         <div style="font-family:'Syne',sans-serif;font-size:1.6rem;
-        font-weight:800;color:#0D1B2A">{calendar['context_label']}</div>
+        font-weight:800;color:#0D1B2A">{mood_label}</div>
         <div style="font-size:0.85rem;color:#8A8A8A;margin-top:0.2rem">
             Formalité {calendar['formality_required']}/5
+        </div>
+        <div style="font-size:0.78rem;color:#B8974A;margin-top:0.3rem">
+            &nbsp;
         </div>
     </div>
     """, unsafe_allow_html=True)
 
-st.markdown('<div class="sw-divider"></div>', unsafe_allow_html=True)
+st.markdown('</div>', unsafe_allow_html=True)
 
 # ══════════════════════════════════════════════════════════════════════════════
 # BLOC RECOMMANDATION
 # ══════════════════════════════════════════════════════════════════════════════
 if not st.session_state.feedback_sent:
-
-    # ── Avatar SVG ────────────────────────────────────────────────────────────
+# Avatar SVG
     recs_data = [
         {"category": row["category"], "color": row["color"], "item_name": row["item_name"]}
         for _, row in recs.iterrows()
     ]
     st.markdown(generate_avatar_svg(recs_data), unsafe_allow_html=True)
+
+    # ── Vibe score ────────────────────────────────────────────────────────────
+    vibe_emoji, vibe_label = get_vibe_score(recs_data)
+    st.markdown(f"""
+    <div style="text-align:center;margin:-0.5rem 0 1rem 0">
+        <span style="font-size:0.78rem;color:#8A8A8A;text-transform:uppercase;
+        letter-spacing:0.1em">Vibe · </span>
+        <span style="font-size:0.85rem;font-weight:700;color:#0D1B2A">
+            {vibe_emoji} {vibe_label}
+        </span>
+    </div>
+    """, unsafe_allow_html=True)
+
 
     # ── Liste scorée ──────────────────────────────────────────────────────────
     cat_emojis = {
