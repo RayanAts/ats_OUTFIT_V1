@@ -13,24 +13,25 @@ def run_query(query):
     conn.close()
     return pd.DataFrame.from_records(rows, columns=columns)
 
-def get_top_recommendations():
-    query = """
-        SELECT TOP 3
-            rank_today,
-            item_name,
-            category,
-            color,
-            material,
-            score_final,
-            weather_label,
-            temp_avg,
-            context_label,
-            formality_required,
-            warmth_match_score,
-            formality_match_score,
-            preference_score
-        FROM dbo.gold_recommendation
-        ORDER BY rank_today, item_name
+def get_top_recommendations(offset=0):
+    query = f"""
+        SELECT *
+        FROM (
+            SELECT
+                item_id, item_name, category, subcategory,
+                color, material, warmth_level, formality_level,
+                score_final, rank_today, weather_label,
+                temp_avg, context_label, formality_required,
+                warmth_match_score, formality_match_score,
+                preference_score,
+                ROW_NUMBER() OVER (
+                    PARTITION BY category
+                    ORDER BY score_final DESC
+                ) AS rn
+            FROM dbo.gold_recommendation
+        ) ranked
+        WHERE rn = {offset + 1}
+        ORDER BY rank_today
     """
     return run_query(query)
 
@@ -78,6 +79,26 @@ def get_calendar_context():
         ORDER BY event_date ASC
     """
     return run_query(query).iloc[0]
+
+def get_tomorrow_context():
+    try:
+        from datetime import datetime, timedelta
+        tomorrow = (datetime.today() + timedelta(days=1)).strftime("%Y-%m-%d")
+        query = f"""
+            SELECT TOP 1
+                event_date,
+                context_type,
+                context_label,
+                formality_required
+            FROM dbo.stg_calendar
+            WHERE event_date = '{tomorrow}'
+        """
+        result = run_query(query)
+        if len(result) > 0:
+            return result.iloc[0]
+        return None
+    except:
+        return None
 
 if __name__ == "__main__":
     print("🌤️ Météo :")

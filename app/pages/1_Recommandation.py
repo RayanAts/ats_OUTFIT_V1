@@ -3,7 +3,6 @@
 # ============================================
 import streamlit as st
 import sys, os
-import anthropic
 from dotenv import load_dotenv
 from datetime import datetime
 
@@ -11,7 +10,7 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 load_dotenv(r"C:\Projects\smartwardrobe\.env")
 
 from styles import GLOBAL_CSS
-from recommender import get_top_recommendations, get_weather_context, get_calendar_context, run_query
+from recommender import get_top_recommendations, get_weather_context, get_calendar_context, get_tomorrow_context, run_query
 from feedback import save_feedback
 
 st.set_page_config(page_title="SmartWardrobe", page_icon="👔", layout="centered")
@@ -114,7 +113,7 @@ def generate_avatar_svg(recs_data):
             </div>
         </div>"""
 
-    svg = f"""
+    return f"""
     <div style="background:white;border:1px solid rgba(13,27,42,0.08);
     border-radius:16px;padding:1.5rem;margin-bottom:1rem">
         <div style="font-size:0.72rem;color:#B8974A;text-transform:uppercase;
@@ -140,43 +139,22 @@ def generate_avatar_svg(recs_data):
         </div>
     </div>
     """
-    return svg
 
-# ── Claude Haiku ──────────────────────────────────────────────────────────────
-def get_claude_advice(recs, weather, calendar):
-    try:
-        client = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
+# ── State ─────────────────────────────────────────────────────────────────────
+if 'feedback_sent' not in st.session_state:
+    st.session_state.feedback_sent = False
+if 'accepted' not in st.session_state:
+    st.session_state.accepted = False
+if 'alternative_count' not in st.session_state:
+    st.session_state.alternative_count = 0
 
-        tenue = "\n".join([
-            f"- {row['item_name']} ({row['category']}, couleur {row['color']}, "
-            f"chaleur {row['warmth_level']}/5, formalité {row['formality_level']}/5)"
-            for _, row in recs.iterrows()
-        ])
-
-        temp = weather.get('temp_current', weather.get('temp_avg', '?'))
-
-        prompt = f"""Tu es un assistant vestimentaire personnel élégant et concis.
-
-Contexte du jour :
-- Météo : {temp}°C actuellement à Paris, {weather['weather_label']}
-- Agenda : {calendar['context_label']}, formalité requise {calendar['formality_required']}/5
-
-La tenue sélectionnée aujourd'hui est exactement :
-{tenue}
-
-En 2 phrases maximum, explique pourquoi CETTE tenue précise est adaptée à la météo et au contexte.
-Ne propose rien d'autre. Sois direct et élégant.
-Ne commence pas par "Je" ou "Bonjour"."""
-
-        message = client.messages.create(
-            model="claude-haiku-4-5",
-            max_tokens=150,
-            messages=[{"role": "user", "content": prompt}]
-        )
-        return message.content[0].text
-
-    except Exception as e:
-        return None
+# ── Chargement ────────────────────────────────────────────────────────────────
+with st.spinner("Analyse en cours..."):
+    weather   = get_weather_context()
+    calendar  = get_calendar_context()
+    recs      = get_top_recommendations(offset=st.session_state.alternative_count)
+    reco_date = get_recommendation_date()
+    tomorrow  = get_tomorrow_context()
 
 # ── Header ────────────────────────────────────────────────────────────────────
 st.markdown("""
@@ -187,21 +165,13 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 
-# ── Chargement ────────────────────────────────────────────────────────────────
-with st.spinner("Analyse en cours..."):
-    weather   = get_weather_context()
-    calendar  = get_calendar_context()
-    recs      = get_top_recommendations()
-    reco_date = get_recommendation_date()
-
-# ── Bannière date + pipeline status ──────────────────────────────────────────
-today_str    = datetime.today().strftime("%Y-%m-%d")
-today_fr     = datetime.today().strftime("%d/%m/%Y")
+# ── Bannière date + pipeline ──────────────────────────────────────────────────
+today_str     = datetime.today().strftime("%Y-%m-%d")
+today_fr      = datetime.today().strftime("%d/%m/%Y")
 reco_date_str = str(reco_date)[:10] if reco_date else None
-
-pipeline_ok     = reco_date_str == today_str
-pipeline_label  = "✅ Pipeline à jour" if pipeline_ok else "⚠️ Pipeline pas encore tourné"
-pipeline_color  = "#22c55e" if pipeline_ok else "#f97316"
+pipeline_ok    = reco_date_str == today_str
+pipeline_label = "✅ Pipeline à jour" if pipeline_ok else "⚠️ Pipeline pas encore tourné"
+pipeline_color = "#22c55e" if pipeline_ok else "#f97316"
 
 st.markdown(f"""
 <div style="background:white;border:1px solid rgba(13,27,42,0.08);
@@ -220,7 +190,7 @@ display:flex;justify-content:space-between;align-items:center">
 </div>
 """, unsafe_allow_html=True)
 
-# ── Contexte météo + agenda ───────────────────────────────────────────────────
+# ── Météo + Contexte ──────────────────────────────────────────────────────────
 weather_emojis = {
     "Ciel dégagé": "☀️", "Nuageux": "🌤️", "Brouillard": "🌫️",
     "Pluie": "🌧️", "Neige": "❄️", "Averses": "🌦️", "Orage": "⛈️"
@@ -230,8 +200,9 @@ context_emojis = {
     "Élégant": "✨", "Casual": "😎", "Sport": "🏃"
 }
 
-# Température actuelle
 temp_display = weather.get('temp_current', weather.get('temp_avg', '?'))
+temp_max     = weather.get('temp_max', '')
+temp_min     = weather.get('temp_min', '')
 
 col1, col2 = st.columns(2)
 
@@ -242,8 +213,11 @@ with col1:
         <div class="sw-page-eyebrow" style="margin-top:0.5rem">Météo · Paris</div>
         <div style="font-family:'Syne',sans-serif;font-size:1.6rem;
         font-weight:800;color:#0D1B2A">{temp_display}°C</div>
-        <div style="font-size:0.85rem;color:#8A8A8A;margin-top:0.2rem">
+        <div style="font-size:0.82rem;color:#8A8A8A;margin-top:0.2rem">
             {weather['weather_label']}
+        </div>
+        <div style="font-size:0.78rem;color:#B8974A;margin-top:0.3rem">
+            ↑ {temp_max}°C · ↓ {temp_min}°C
         </div>
     </div>
     """, unsafe_allow_html=True)
@@ -263,21 +237,19 @@ with col2:
 
 st.markdown('<div class="sw-divider"></div>', unsafe_allow_html=True)
 
-# ── State ─────────────────────────────────────────────────────────────────────
-if 'feedback_sent' not in st.session_state:
-    st.session_state.feedback_sent = False
-
-# ── Recommandations ───────────────────────────────────────────────────────────
+# ══════════════════════════════════════════════════════════════════════════════
+# BLOC RECOMMANDATION
+# ══════════════════════════════════════════════════════════════════════════════
 if not st.session_state.feedback_sent:
 
-    # Avatar SVG
+    # ── Avatar SVG ────────────────────────────────────────────────────────────
     recs_data = [
         {"category": row["category"], "color": row["color"], "item_name": row["item_name"]}
         for _, row in recs.iterrows()
     ]
     st.markdown(generate_avatar_svg(recs_data), unsafe_allow_html=True)
 
-    # Liste scorée
+    # ── Liste scorée ──────────────────────────────────────────────────────────
     cat_emojis = {
         "Haut": "👕", "Bas": "👖",
         "Chaussures": "👟", "Accessoire": "🧣"
@@ -300,23 +272,48 @@ if not st.session_state.feedback_sent:
         </div>
         """, unsafe_allow_html=True)
 
-    # Conseil Claude
-    with st.spinner("✨ Claude analyse ta tenue..."):
-        conseil = get_claude_advice(recs, weather, calendar)
+    # ── Contexte lendemain ────────────────────────────────────────────────────
+    if tomorrow is not None:
+        context_to_label = {
+            "bureau":         "Au bureau",
+            "réunion_client": "Réunion importante",
+            "casual":         "Journée détendue",
+            "sport":          "Activité sportive",
+            "soirée":         "Soirée"
+        }
+        context_to_conseil = {
+            "bureau":         "Prépare une tenue propre et soignée",
+            "réunion_client": "Prépare ta plus belle chemise",
+            "casual":         "Demain tu peux t'habiller comme tu veux",
+            "sport":          "Pense à préparer ta tenue de sport",
+            "soirée":         "Prépare une tenue élégante"
+        }
+        context_type   = str(tomorrow['context_type'])
+        label_demain   = context_to_label.get(context_type, "Demain")
+        conseil_demain = context_to_conseil.get(context_type, "Prépare ta tenue à l'avance")
+        tomorrow_emoji = context_emojis.get(str(tomorrow['context_label']), "📅")
 
-    if conseil:
         st.markdown(f"""
-        <div style="background:white;border:1px solid rgba(184,151,74,0.2);
-        border-radius:14px;padding:1.2rem 1.4rem;margin:1rem 0">
-            <div style="font-size:0.72rem;color:#B8974A;text-transform:uppercase;
-            letter-spacing:0.1em;margin-bottom:0.5rem">✨ Conseil du jour</div>
-            <div style="font-size:0.9rem;color:#0D1B2A;line-height:1.6;font-style:italic">
-                "{conseil}"
+        <div style="background:white;border:1px solid rgba(13,27,42,0.08);
+        border-radius:14px;padding:1rem 1.4rem;margin-top:0.8rem">
+            <div style="font-size:0.72rem;color:#8A8A8A;text-transform:uppercase;
+            letter-spacing:0.1em;margin-bottom:0.5rem">📅 Demain</div>
+            <div style="display:flex;justify-content:space-between;align-items:center">
+                <div style="font-family:'Syne',sans-serif;font-size:0.95rem;
+                font-weight:700;color:#0D1B2A">
+                    {tomorrow_emoji} {label_demain}
+                </div>
+                <div style="font-size:0.78rem;color:#B8974A;
+                font-weight:500;text-align:right;max-width:200px">
+                    {conseil_demain}
+                </div>
             </div>
         </div>
         """, unsafe_allow_html=True)
 
     st.markdown('<div class="sw-divider"></div>', unsafe_allow_html=True)
+
+    # ── Question + boutons ────────────────────────────────────────────────────
     st.markdown("""
     <p style="font-family:'Syne',sans-serif;font-size:1rem;
     font-weight:600;color:#0D1B2A;margin-bottom:1rem">
@@ -324,7 +321,13 @@ if not st.session_state.feedback_sent:
     </p>
     """, unsafe_allow_html=True)
 
-    col_yes, col_no = st.columns(2)
+    col_alt, col_yes, col_no = st.columns([1, 1, 1])
+
+    with col_alt:
+        if st.button("🔄 Autre tenue", use_container_width=True, type="secondary"):
+            st.session_state.alternative_count += 1
+            st.cache_data.clear()
+            st.rerun()
 
     with col_yes:
         if st.button("✓  J'accepte", use_container_width=True, type="primary"):
@@ -339,6 +342,7 @@ if not st.session_state.feedback_sent:
                 )
             st.session_state.feedback_sent = True
             st.session_state.accepted = True
+            st.session_state.alternative_count = 0
             st.rerun()
 
     with col_no:
@@ -354,8 +358,12 @@ if not st.session_state.feedback_sent:
                 )
             st.session_state.feedback_sent = True
             st.session_state.accepted = False
+            st.session_state.alternative_count = 0
             st.rerun()
 
+# ══════════════════════════════════════════════════════════════════════════════
+# BLOC POST-FEEDBACK
+# ══════════════════════════════════════════════════════════════════════════════
 else:
     if st.session_state.accepted:
         st.markdown("""
