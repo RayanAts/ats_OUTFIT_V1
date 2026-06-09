@@ -1,240 +1,155 @@
 # ============================================
-# NIGHTLY PIPELINE - Boucle RL automatique
+# NIGHTLY PIPELINE - Supabase
 # ============================================
 import os
 import json
 import subprocess
 import requests
-from datetime import datetime
-from azure.identity import AzureCliCredential
-from azure.storage.filedatalake import DataLakeServiceClient
+from datetime import datetime, timedelta
+from dotenv import load_dotenv
+from supabase import create_client
+import random
 
-# ── Config ────────────────────────────────────────────────────────────────────
-ACCOUNT_URL   = "https://onelake.dfs.fabric.microsoft.com"
-WORKSPACE     = "liptonws"
-LAKEHOUSE     = "smartwardrobe_lakehouse.Lakehouse"
-FEEDBACK_DIR  = r"C:\Projects\smartwardrobe\app\feedback_local"
-DBT_DIR       = r"C:\Projects\smartwardrobe\ats_outfit"
-DBT_ENV       = r"C:\Projects\smartwardrobe\dbt-env\Scripts\dbt.exe"
+load_dotenv(r"C:\Projects\smartwardrobe\.env")
+
+SUPABASE_URL = os.getenv("SUPABASE_URL")
+SUPABASE_KEY = os.getenv("SUPABASE_KEY")
+DBT_DIR      = r"C:\Projects\smartwardrobe\ats_outfit"
+DBT_ENV      = r"C:\Projects\smartwardrobe\dbt-env\Scripts\dbt.exe"
+
+supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 def log(msg):
     print(f"[{datetime.now().strftime('%H:%M:%S')}] {msg}")
 
-# ── Étape 1 : Upload feedbacks vers Fabric ────────────────────────────────────
-def upload_feedbacks():
-    log("Upload feedbacks vers Fabric...")
-    
-    credential = AzureCliCredential()
-    client     = DataLakeServiceClient(account_url=ACCOUNT_URL, credential=credential)
-    fs_client  = client.get_file_system_client(WORKSPACE)
+# ── Météo ─────────────────────────────────────────────────────────────────────
+def update_weather():
+    log("Mise à jour météo...")
 
-    uploaded = 0
-    for fname in os.listdir(FEEDBACK_DIR):
-        if not fname.endswith(".json"):
-            continue
+    params = {
+        "latitude":  48.8566,
+        "longitude": 2.3522,
+        "current":   ["temperature_2m", "weathercode", "precipitation"],
+        "daily":     ["temperature_2m_max", "temperature_2m_min",
+                      "precipitation_sum", "windspeed_10m_max", "weathercode"],
+        "timezone":  "Europe/Paris",
+        "forecast_days": 1
+    }
 
-        filepath = os.path.join(FEEDBACK_DIR, fname)
-        with open(filepath, "r", encoding="utf-8") as f:
-            content = f.read()
+    r       = requests.get("https://api.open-meteo.com/v1/forecast", params=params)
+    raw     = r.json()
+    current = raw["current"]
+    daily   = raw["daily"]
+    today   = datetime.today().strftime("%Y-%m-%d")
 
-        remote_path = f"{LAKEHOUSE}/Files/bronze/feedback/{fname}"
-        file_client = fs_client.get_file_client(remote_path)
-        file_client.upload_data(content, overwrite=True)
-        uploaded += 1
+    temp_max = daily["temperature_2m_max"][0]
+    temp_min = daily["temperature_2m_min"][0]
+    temp_avg = round((temp_max + temp_min) / 2, 1)
+    wcode    = daily["weathercode"][0]
 
-    log(f"✅ {uploaded} feedback(s) uploadé(s)")
-    return uploaded
+    weather_labels = {
+        0: "Ciel dégagé", 1: "Nuageux", 2: "Nuageux", 3: "Nuageux",
+        45: "Brouillard", 48: "Brouillard",
+        51: "Pluie", 53: "Pluie", 55: "Pluie",
+        61: "Pluie", 63: "Pluie", 65: "Pluie",
+        71: "Neige", 73: "Neige", 75: "Neige",
+        80: "Averses", 81: "Averses", 82: "Averses",
+        95: "Orage", 96: "Orage", 99: "Orage"
+    }
+    label = weather_labels.get(wcode, "Nuageux")
 
-# ── Étape 2 : Déclencher le Notebook Fabric via API REST ─────────────────────
-def trigger_fabric_notebook():
-    log("Déclenchement du Notebook Fabric...")
+    if temp_avg >= 20:   warmth = 1
+    elif temp_avg >= 12: warmth = 2
+    elif temp_avg >= 5:  warmth = 3
+    else:                warmth = 4
 
-    credential   = AzureCliCredential()
-    token        = credential.get_token("https://api.fabric.microsoft.com/.default")
-    access_token = token.token
+    record = {
+        "fetch_date":          today,
+        "fetch_time":          datetime.now().strftime("%H:%M"),
+        "ville":               "Paris",
+        "temp_actuelle":       current["temperature_2m"],
+        "temp_max":            temp_max,
+        "temp_min":            temp_min,
+        "temp_moyenne":        temp_avg,
+        "precipitation_mm":    daily["precipitation_sum"][0],
+        "vitesse_vent_max":    daily["windspeed_10m_max"][0],
+        "weathercode":         wcode,
+        "label_meteo":         label,
+        "chaleur_recommandee": warmth
+    }
 
-    # Récupérer l'ID du workspace
-    headers = {"Authorization": f"Bearer {access_token}"}
-    
-    ws_response = requests.get(
-        "https://api.fabric.microsoft.com/v1/workspaces",
-        headers=headers
-    )
-    
-    workspace_id = None
-    for ws in ws_response.json().get("value", []):
-        if ws["displayName"] == WORKSPACE:
-            workspace_id = ws["id"]
-            break
+    # Supprimer l'ancienne météo du jour si elle existe
+    supabase.table("meteo").delete().eq("fetch_date", today).execute()
+    supabase.table("meteo").insert(record).execute()
 
-    if not workspace_id:
-        log("❌ Workspace non trouvé")
-        return False
+    log(f"✅ Météo mise à jour : {current['temperature_2m']}°C à Paris")
 
-    # Récupérer l'ID du Notebook
-    nb_response = requests.get(
-        f"https://api.fabric.microsoft.com/v1/workspaces/{workspace_id}/notebooks",
-        headers=headers
-    )
+# ── Calendrier ────────────────────────────────────────────────────────────────
+def update_calendar():
+    log("Mise à jour calendrier...")
 
-    notebook_id = None
-    for nb in nb_response.json().get("value", []):
-        if "Notebook 2" in nb["displayName"] or "sync" in nb["displayName"].lower():
-            notebook_id = nb["id"]
-            break
+    context_types = [
+        {"type_contexte": "bureau",         "label_contexte": "Semi-formel", "formalite_requise": 3, "exposition_exterieure": False},
+        {"type_contexte": "réunion_client", "label_contexte": "Formel",      "formalite_requise": 5, "exposition_exterieure": False},
+        {"type_contexte": "casual",         "label_contexte": "Casual",      "formalite_requise": 1, "exposition_exterieure": True},
+        {"type_contexte": "sport",          "label_contexte": "Sport",       "formalite_requise": 1, "exposition_exterieure": True},
+        {"type_contexte": "soirée",         "label_contexte": "Élégant",     "formalite_requise": 4, "exposition_exterieure": False},
+    ]
 
-    if not notebook_id:
-        log("❌ Notebook non trouvé")
-        return False
+    records = []
+    for i in range(30):
+        day = (datetime.today() + timedelta(days=i)).strftime("%Y-%m-%d")
+        ctx = random.choice(context_types)
+        records.append({
+            "date_evenement":       day,
+            "type_contexte":        ctx["type_contexte"],
+            "label_contexte":       ctx["label_contexte"],
+            "formalite_requise":    ctx["formalite_requise"],
+            "exposition_exterieure": ctx["exposition_exterieure"]
+        })
 
-    log(f"✅ Notebook trouvé : {notebook_id}")
-    return True
+    # Supprimer et réécrire le calendrier
+    supabase.table("calendrier").delete().gte("date_evenement", datetime.today().strftime("%Y-%m-%d")).execute()
+    supabase.table("calendrier").insert(records).execute()
 
-# ── Étape 3 : Lancer dbt run ──────────────────────────────────────────────────
+    log(f"✅ Calendrier mis à jour — 30 jours")
+
+# ── dbt run ───────────────────────────────────────────────────────────────────
 def run_dbt():
     log("Lancement dbt run...")
-
     result = subprocess.run(
-        [DBT_ENV, "run", "--select",
-         "stg_wardrobe stg_weather stg_calendar dim_wardrobe_scd2 gold_recommendation"],
+        [DBT_ENV, "run"],
         cwd=DBT_DIR,
-        capture_output=True,
+        capture_output=False,
         text=True
     )
-
     if result.returncode == 0:
         log("✅ dbt run terminé avec succès")
     else:
-        log(f"❌ dbt run échoué : {result.stderr}")
-
+        log("❌ dbt run échoué")
     return result.returncode == 0
 
-# ── Étape 4 : Mettre à jour la météo ─────────────────────────────────────────
-def update_weather():
-    log("Mise à jour météo...")
-    import requests as req
-    from datetime import datetime
-
+# ── Historique recommandations ────────────────────────────────────────────────
+def save_recommendation_history():
+    log("Enregistrement historique recommandations...")
     today = datetime.today().strftime("%Y-%m-%d")
 
-    # Température actuelle (temps réel)
-    params_current = {
-        "latitude": 48.8566,
-        "longitude": 2.3522,
-        "current": ["temperature_2m", "weathercode", "precipitation"],
-        "timezone": "Europe/Paris"
-    }
+    # Lire gold_recommendation depuis Supabase
+    result = supabase.table("gold_recommendation").select("item_name, category").execute()
 
-    # Prévisions journalières
-    params_daily = {
-        "latitude": 48.8566,
-        "longitude": 2.3522,
-        "daily": [
-            "temperature_2m_max",
-            "temperature_2m_min",
-            "precipitation_sum",
-            "windspeed_10m_max",
-            "weathercode"
-        ],
-        "timezone": "Europe/Paris",
-        "forecast_days": 1
-    }
-
-    r_current = req.get("https://api.open-meteo.com/v1/forecast", params=params_current)
-    r_daily   = req.get("https://api.open-meteo.com/v1/forecast", params=params_daily)
-
-    current = r_current.json()["current"]
-    daily   = r_daily.json()["daily"]
-
-    weather_record = {
-        "fetch_date":        today,
-        "fetch_time":        datetime.today().strftime("%H:%M"),
-        "latitude":          48.8566,
-        "longitude":         2.3522,
-        "city":              "Paris",
-        "temp_current":      current["temperature_2m"],
-        "temp_max":          daily["temperature_2m_max"][0],
-        "temp_min":          daily["temperature_2m_min"][0],
-        "precipitation_mm":  daily["precipitation_sum"][0],
-        "windspeed_max_kmh": daily["windspeed_10m_max"][0],
-        "weathercode":       daily["weathercode"][0]
-    }
-
-    content     = json.dumps(weather_record, indent=2)
-    credential  = AzureCliCredential()
-    client      = DataLakeServiceClient(account_url=ACCOUNT_URL, credential=credential)
-    fs_client   = client.get_file_system_client(WORKSPACE)
-    remote_path = f"{LAKEHOUSE}/Files/bronze/weather/weather_raw_{today}.json"
-    file_client = fs_client.get_file_client(remote_path)
-    file_client.upload_data(content, overwrite=True)
-
-    log(f"✅ Météo mise à jour : {weather_record['temp_current']}°C actuellement à Paris")
-
-    import requests as req
-    from datetime import datetime
-
-    today = datetime.today().strftime("%Y-%m-%d")
-
-    # Température actuelle (temps réel)
-    params_current = {
-        "latitude": 48.8566,
-        "longitude": 2.3522,
-        "current": ["temperature_2m", "weathercode", "precipitation"],
-        "timezone": "Europe/Paris"
-    }
-
-    # Prévisions journalières
-    params_daily = {
-        "latitude": 48.8566,
-        "longitude": 2.3522,
-        "daily": [
-            "temperature_2m_max",
-            "temperature_2m_min",
-            "precipitation_sum",
-            "windspeed_10m_max",
-            "weathercode"
-        ],
-        "timezone": "Europe/Paris",
-        "forecast_days": 1
-    }
-
-    r_current = req.get("https://api.open-meteo.com/v1/forecast", params=params_current)
-    r_daily   = req.get("https://api.open-meteo.com/v1/forecast", params=params_daily)
-
-    current = r_current.json()["current"]
-    daily   = r_daily.json()["daily"]
-
-    weather_record = {
-        "fetch_date":        today,
-        "fetch_time":        datetime.today().strftime("%H:%M"),
-        "latitude":          48.8566,
-        "longitude":         2.3522,
-        "city":              "Paris",
-        "temp_current":      current["temperature_2m"],
-        "temp_max":          daily["temperature_2m_max"][0],
-        "temp_min":          daily["temperature_2m_min"][0],
-        "precipitation_mm":  daily["precipitation_sum"][0],
-        "windspeed_max_kmh": daily["windspeed_10m_max"][0],
-        "weathercode":       daily["weathercode"][0]
-    }
-
-    content     = json.dumps(weather_record, indent=2)
-    credential  = AzureCliCredential()
-    client      = DataLakeServiceClient(account_url=ACCOUNT_URL, credential=credential)
-    fs_client   = client.get_file_system_client(WORKSPACE)
-    remote_path = f"{LAKEHOUSE}/Files/bronze/weather/weather_raw_{today}.json"
-    file_client = fs_client.get_file_client(remote_path)
-    file_client.upload_data(content, overwrite=True)
-
-    log(f"✅ Météo mise à jour : {weather_record['temp_current']}°C actuellement à Paris")
+    if result.data:
+        records = [
+            {"date_recommandation": today, "nom_vetement": row["item_name"], "categorie": row["category"]}
+            for row in result.data
+        ]
+        supabase.table("historique_recommandations").insert(records).execute()
+        log(f"✅ {len(records)} vêtements enregistrés dans l'historique")
 
 # ── Main ──────────────────────────────────────────────────────────────────────
 if __name__ == "__main__":
     log("=== NIGHTLY PIPELINE DÉMARRÉ ===")
-
-    upload_feedbacks()
     update_weather()
-    trigger_fabric_notebook()
+    update_calendar()
     run_dbt()
-
+    save_recommendation_history()
     log("=== PIPELINE TERMINÉ ===")

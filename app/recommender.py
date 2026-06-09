@@ -1,22 +1,13 @@
 # ============================================
-# RECOMMENDER - Lecture gold_recommendation
+# RECOMMENDER - Lecture depuis Supabase
 # ============================================
 import pandas as pd
-from connector import get_connection
-
-def run_query(query):
-    conn = get_connection()
-    cursor = conn.cursor()
-    cursor.execute(query)
-    columns = [col[0] for col in cursor.description]
-    rows = cursor.fetchall()
-    conn.close()
-    return pd.DataFrame.from_records(rows, columns=columns)
+from connector import run_query
+from datetime import datetime, timedelta
 
 def get_top_recommendations(offset=0):
     query = f"""
-        SELECT *
-        FROM (
+        WITH ranked AS (
             SELECT
                 item_id, item_name, category, subcategory,
                 color, material, warmth_level, formality_level,
@@ -28,30 +19,30 @@ def get_top_recommendations(offset=0):
                     PARTITION BY category
                     ORDER BY score_final DESC
                 ) AS rn
-            FROM dbo.gold_recommendation
-        ) ranked
+            FROM public.gold_recommendation
+        )
+        SELECT * FROM ranked
         WHERE rn = {offset + 1}
         ORDER BY rank_today
     """
-    return run_query(query)
-
+    result = run_query(query)
+    return result
 
 def get_recommendation_date():
     query = """
-        SELECT TOP 1
-            recommendation_date
-        FROM dbo.gold_recommendation
+        SELECT recommendation_date
+        FROM public.gold_recommendation
         ORDER BY recommendation_date DESC
+        LIMIT 1
     """
     result = run_query(query)
     if len(result) > 0:
         return str(result.iloc[0]['recommendation_date'])
     return None
 
-
 def get_weather_context():
     query = """
-        SELECT TOP 1
+        SELECT
             fetch_date,
             fetch_time,
             city,
@@ -62,36 +53,39 @@ def get_weather_context():
             weather_label,
             precipitation_mm,
             windspeed_max_kmh
-        FROM dbo.stg_weather
+        FROM public.stg_weather
         ORDER BY fetch_date DESC
+        LIMIT 1
     """
     return run_query(query).iloc[0]
 
 def get_calendar_context():
     query = """
-        SELECT TOP 1
+        SELECT
             event_date,
             context_type,
             context_label,
             formality_required,
             outdoor_exposure
-        FROM dbo.stg_calendar
+        FROM public.stg_calendar
+        WHERE event_date >= CURRENT_DATE
         ORDER BY event_date ASC
+        LIMIT 1
     """
     return run_query(query).iloc[0]
 
 def get_tomorrow_context():
     try:
-        from datetime import datetime, timedelta
         tomorrow = (datetime.today() + timedelta(days=1)).strftime("%Y-%m-%d")
         query = f"""
-            SELECT TOP 1
+            SELECT
                 event_date,
                 context_type,
                 context_label,
                 formality_required
-            FROM dbo.stg_calendar
+            FROM public.stg_calendar
             WHERE event_date = '{tomorrow}'
+            LIMIT 1
         """
         result = run_query(query)
         if len(result) > 0:

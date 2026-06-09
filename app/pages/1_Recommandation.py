@@ -39,9 +39,10 @@ def get_color(color_name):
 def get_recommendation_date():
     try:
         result = run_query("""
-            SELECT TOP 1 recommendation_date
-            FROM dbo.gold_recommendation
+            SELECT recommendation_date
+            FROM public.gold_recommendation
             ORDER BY recommendation_date DESC
+            LIMIT 1
         """)
         if len(result) > 0:
             return str(result.iloc[0]['recommendation_date'])
@@ -73,7 +74,7 @@ def generate_avatar_svg(recs_data):
     border-radius:16px;padding:1.5rem;margin-bottom:1rem">
         <div style="font-size:0.72rem;color:#B8974A;text-transform:uppercase;
         letter-spacing:0.1em;margin-bottom:1rem">👔 Aperçu de la tenue</div>
-        <div style="display:flex;justify-content:center">
+        <div style="display:flex;justify-content:center;align-items:flex-start;gap:2rem">
             <svg width="140" height="300" viewBox="0 0 160 340" xmlns="http://www.w3.org/2000/svg">
                 <ellipse cx="80" cy="35" rx="28" ry="32" fill="{skin}"/>
                 <ellipse cx="80" cy="18" rx="28" ry="16" fill="{hair}"/>
@@ -90,11 +91,12 @@ def generate_avatar_svg(recs_data):
                 <rect x="88" y="258" width="44" height="12" fill="{shoes_color}" rx="6"/>
                 <ellipse cx="80" cy="282" rx="45" ry="6" fill="rgba(0,0,0,0.06)"/>
             </svg>
+            <div style="padding-top:2rem">LEGENDE_PLACEHOLDER</div>
         </div>
     </div>
     """
 
-def generate_legend(recs_data):
+def generate_avatar_with_legend(recs_data):
     haut_color  = "#E0D8CE"
     bas_color   = "#C8C0B4"
     shoes_color = "#8B7355"
@@ -115,6 +117,9 @@ def generate_legend(recs_data):
         elif cat == "Chaussures" and not shoes_name:
             shoes_color = color
             shoes_name  = name
+
+    skin = "#D4A574"
+    hair = "#2C1810"
 
     legende = ""
     if haut_name:
@@ -153,7 +158,34 @@ def generate_legend(recs_data):
                 font-weight:700;color:#0D1B2A">{shoes_name[:25]}</div>
             </div>
         </div>"""
-    return f'<div style="padding-top:1rem">{legende.strip()}</div>'
+
+    return f"""
+    <div style="background:white;border:1px solid rgba(13,27,42,0.08);
+    border-radius:16px;padding:1.5rem;margin-bottom:1rem">
+        <div style="font-size:0.72rem;color:#B8974A;text-transform:uppercase;
+        letter-spacing:0.1em;margin-bottom:1rem">👔 Aperçu de la tenue</div>
+        <div style="display:flex;justify-content:center;align-items:flex-start;gap:2rem">
+            <svg width="140" height="300" viewBox="0 0 160 340" xmlns="http://www.w3.org/2000/svg">
+                <ellipse cx="80" cy="35" rx="28" ry="32" fill="{skin}"/>
+                <ellipse cx="80" cy="18" rx="28" ry="16" fill="{hair}"/>
+                <rect x="52" y="18" width="56" height="12" fill="{hair}"/>
+                <rect x="72" y="64" width="16" height="14" fill="{skin}" rx="3"/>
+                <path d="M35 78 Q50 70 72 75 L72 78 Q80 76 88 78 L88 75 Q110 70 125 78 L130 160 Q80 170 30 160 Z" fill="{haut_color}"/>
+                <path d="M72 75 L80 90 L88 75" fill="none" stroke="{skin}" stroke-width="2"/>
+                <path d="M35 78 L15 130 Q12 140 18 142 L42 158 L50 110 Z" fill="{haut_color}"/>
+                <path d="M125 78 L145 130 Q148 140 142 142 L118 158 L110 110 Z" fill="{haut_color}"/>
+                <ellipse cx="16" cy="145" rx="8" ry="10" fill="{skin}"/>
+                <ellipse cx="144" cy="145" rx="8" ry="10" fill="{skin}"/>
+                <path d="M32 158 L30 260 L70 260 L80 210 L90 260 L130 260 L128 158 Z" fill="{bas_color}"/>
+                <rect x="28" y="258" width="44" height="12" fill="{shoes_color}" rx="6"/>
+                <rect x="88" y="258" width="44" height="12" fill="{shoes_color}" rx="6"/>
+                <ellipse cx="80" cy="282" rx="45" ry="6" fill="rgba(0,0,0,0.06)"/>
+            </svg>
+            <div style="padding-top:2rem">{legende}</div>
+        </div>
+    </div>
+    """
+
 # ── Score Vibe ────────────────────────────────────────────────────────────────
 def get_vibe_score(recs_data):
     NEUTRES = ["Blanc", "Beige", "Gris", "Camel"]
@@ -176,6 +208,7 @@ def get_vibe_score(recs_data):
         return "⚠️", "Attention"
     else:
         return "🔥", "Stylé"
+
 # ── State ─────────────────────────────────────────────────────────────────────
 if 'feedback_sent' not in st.session_state:
     st.session_state.feedback_sent = False
@@ -294,16 +327,13 @@ st.markdown('</div>', unsafe_allow_html=True)
 # BLOC RECOMMANDATION
 # ══════════════════════════════════════════════════════════════════════════════
 if not st.session_state.feedback_sent:
-# Avatar SVG
+
+    # ── Avatar + Légende (tout en un seul bloc HTML) ──────────────────────────
     recs_data = [
         {"category": row["category"], "color": row["color"], "item_name": row["item_name"]}
         for _, row in recs.iterrows()
     ]
-    col_av, col_lg = st.columns([3, 2])
-    with col_av:
-        st.markdown(generate_avatar_svg(recs_data), unsafe_allow_html=True)
-    with col_lg:
-        st.html(generate_legend(recs_data))
+    st.markdown(generate_avatar_with_legend(recs_data), unsafe_allow_html=True)
 
     # ── Vibe score ────────────────────────────────────────────────────────────
     vibe_emoji, vibe_label = get_vibe_score(recs_data)
@@ -316,7 +346,6 @@ if not st.session_state.feedback_sent:
         </span>
     </div>
     """, unsafe_allow_html=True)
-
 
     # ── Liste scorée ──────────────────────────────────────────────────────────
     cat_emojis = {

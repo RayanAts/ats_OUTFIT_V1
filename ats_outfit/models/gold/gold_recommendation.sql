@@ -8,26 +8,28 @@ WITH wardrobe AS (
     SELECT *
     FROM {{ ref('dim_wardrobe_scd2') }}
     WHERE is_current = 1
-    AND is_active = 1
+    AND is_active = true
 ),
 
 weather AS (
-    SELECT TOP 1 *
+    SELECT *
     FROM {{ ref('stg_weather') }}
     ORDER BY fetch_date DESC
+    LIMIT 1
 ),
 
 calendar AS (
-    SELECT TOP 1 *
+    SELECT *
     FROM {{ ref('stg_calendar') }}
-    WHERE event_date >= CAST(GETDATE() AS DATE)
+    WHERE event_date >= CURRENT_DATE
     ORDER BY event_date ASC
+    LIMIT 1
 ),
 
 recent_recs AS (
-    SELECT DISTINCT item_id
-    FROM smartwardrobe_lakehouse.dbo.recommendation_history
-    WHERE recommendation_date >= CAST(DATEADD(day, -3, GETDATE()) AS DATE)
+    SELECT DISTINCT nom_vetement
+    FROM public.historique_recommandations
+    WHERE date_recommandation >= CURRENT_DATE - INTERVAL '3 days'
 ),
 
 scoring AS (
@@ -69,77 +71,73 @@ scoring AS (
 
         -- Score couleur selon température
         CASE
-            -- Temps chaud (>20°C) → couleurs claires favorisées
             WHEN wt.temp_avg >= 20 AND w.color IN ('Blanc', 'Beige', 'Gris', 'Camel') THEN 1.0
             WHEN wt.temp_avg >= 20 AND w.color IN ('Bleu', 'Vert', 'Kaki')            THEN 0.7
             WHEN wt.temp_avg >= 20 AND w.color IN ('Marine', 'Bordeaux', 'Rouge')     THEN 0.5
             WHEN wt.temp_avg >= 20 AND w.color = 'Noir'                               THEN 0.3
-            -- Temps froid (<12°C) → couleurs foncées OK
             WHEN wt.temp_avg < 12 AND w.color IN ('Noir', 'Marine', 'Bordeaux')       THEN 1.0
             WHEN wt.temp_avg < 12 AND w.color IN ('Gris', 'Marron', 'Kaki')           THEN 0.8
             WHEN wt.temp_avg < 12 AND w.color IN ('Blanc', 'Beige', 'Camel')          THEN 0.6
-            -- Temps intermédiaire → neutre
             ELSE 0.7
         END AS color_score,
 
         -- Score matière selon température
         CASE
-            -- Temps chaud → matières légères
             WHEN wt.temp_avg >= 20 AND w.material IN ('Coton', 'Lin')                 THEN 1.0
             WHEN wt.temp_avg >= 20 AND w.material IN ('Polyester', 'Nylon')           THEN 0.7
             WHEN wt.temp_avg >= 20 AND w.material IN ('Denim', 'Cuir')                THEN 0.5
             WHEN wt.temp_avg >= 20 AND w.material IN ('Laine', 'Cachemire')           THEN 0.2
-            -- Temps froid → matières chaudes
             WHEN wt.temp_avg < 12 AND w.material IN ('Laine', 'Cachemire')            THEN 1.0
             WHEN wt.temp_avg < 12 AND w.material IN ('Polyester', 'Nylon')            THEN 0.8
             WHEN wt.temp_avg < 12 AND w.material IN ('Coton', 'Denim')                THEN 0.6
             WHEN wt.temp_avg < 12 AND w.material IN ('Lin')                           THEN 0.3
-            -- Temps intermédiaire → neutre
             ELSE 0.7
         END AS material_score,
 
-        -- Préférence historique
         0.5 AS preference_score,
 
-        -- Pénalité récence
-        CASE WHEN r.item_id IS NOT NULL THEN 0.3 ELSE 0.0 END AS recency_penalty
+        CASE WHEN r.nom_vetement IS NOT NULL THEN 0.3 ELSE 0.0 END AS recency_penalty
 
     FROM wardrobe w
     CROSS JOIN weather wt
     CROSS JOIN calendar cal
-    LEFT JOIN recent_recs r ON w.item_id = r.item_id
+    LEFT JOIN recent_recs r ON w.item_name = r.nom_vetement
 ),
 
 scored AS (
     SELECT
         *,
-        CAST(
-            (warmth_match_score  * 0.30) +
+        ROUND(CAST(
+            (warmth_match_score   * 0.30) +
             (formality_match_score * 0.30) +
-            (color_score         * 0.20) +
-            (material_score      * 0.20) -
+            (color_score          * 0.20) +
+            (material_score       * 0.20) -
             recency_penalty
-        AS DECIMAL(5,4)) AS score_final
+        AS NUMERIC), 4) AS score_final
     FROM scoring
 ),
 
 best_haut AS (
-    SELECT TOP 1 *, 1 AS rank_today
+    SELECT *, 1 AS rank_today
     FROM scored WHERE category = 'Haut'
     ORDER BY score_final DESC
+    LIMIT 6
 ),
 
 best_bas AS (
-    SELECT TOP 1 *, 2 AS rank_today
+    SELECT *, 2 AS rank_today
     FROM scored WHERE category = 'Bas'
     ORDER BY score_final DESC
+    LIMIT 6
 ),
 
 best_shoes AS (
-    SELECT TOP 1 *, 3 AS rank_today
+    SELECT *, 3 AS rank_today
     FROM scored WHERE category = 'Chaussures'
     ORDER BY score_final DESC
+    LIMIT 6
 ),
+
 
 final AS (
     SELECT * FROM best_haut
@@ -156,7 +154,7 @@ SELECT
     material,
     warmth_level,
     formality_level,
-    fetch_date          AS recommendation_date,
+    fetch_date              AS recommendation_date,
     temp_avg,
     weather_label,
     recommended_warmth,
@@ -172,5 +170,5 @@ SELECT
     recency_penalty,
     score_final,
     rank_today,
-    CAST(SYSDATETIME() AS datetime2(6)) AS dbt_loaded_at
+    NOW()                   AS dbt_loaded_at
 FROM final

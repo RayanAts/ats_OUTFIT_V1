@@ -1,41 +1,39 @@
 # ============================================
-# CONNECTOR - Connexion au Warehouse Fabric
+# CONNECTOR - Connexion Supabase
 # ============================================
-import pyodbc
-import struct
-from azure.identity import AzureCliCredential
+import os
+import pandas as pd
+from supabase import create_client
+from dotenv import load_dotenv
 
-SERVER = "qw4joi7ev7duxhq64sez55cndi-keoyaocqxrbunasslfn52uqmlm.datawarehouse.fabric.microsoft.com"
-DATABASE = "smartwardrobe_warehouse"
-DRIVER = "ODBC Driver 18 for SQL Server"
+load_dotenv(r"C:\Projects\smartwardrobe\.env")
 
-def get_token():
-    credential = AzureCliCredential()
-    token = credential.get_token("https://database.windows.net/.default")
-    token_bytes = token.token.encode("UTF-16-LE")
-    token_struct = struct.pack(f"<I{len(token_bytes)}s", len(token_bytes), token_bytes)
-    return token_struct
+SUPABASE_URL = os.getenv("SUPABASE_URL")
+SUPABASE_KEY = os.getenv("SUPABASE_KEY")
 
-def get_connection():
-    conn_str = (
-        f"DRIVER={{{DRIVER}}};"
-        f"SERVER={SERVER};"
-        f"DATABASE={DATABASE};"
-        f"Encrypt=yes;"
-        f"TrustServerCertificate=no;"
+supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
+
+def get_supabase():
+    return supabase
+
+def run_query(query: str) -> pd.DataFrame:
+    from sqlalchemy import create_engine
+    password = os.getenv("SUPABASE_DB_PASSWORD")
+    engine = create_engine(
+        f"postgresql://postgres.wvqntpaovovtpwxunkxd:{password}@aws-1-eu-central-1.pooler.supabase.com:6543/postgres",
+        connect_args={"sslmode": "require"}
     )
-    token_struct = get_token()
-    conn = pyodbc.connect(conn_str, attrs_before={1256: token_struct})
-    return conn
+    with engine.connect() as conn:
+        df = pd.read_sql(query, conn)
+    return df
 
 def test_connection():
     try:
-        conn = get_connection()
-        cursor = conn.cursor()
-        cursor.execute("SELECT TOP 1 item_name, score_final FROM dbo.gold_recommendation ORDER BY rank_today")
-        row = cursor.fetchone()
-        print(f"✅ Connexion OK — Meilleure reco : {row[0]} ({row[1]})")
-        conn.close()
+        result = supabase.table("gold_recommendation").select("item_name, score_final").execute()
+        if result.data:
+            print(f"✅ Connexion OK — {len(result.data)} recommandations")
+        else:
+            print("✅ Connexion OK — table vide")
     except Exception as e:
         print(f"❌ Erreur : {e}")
 

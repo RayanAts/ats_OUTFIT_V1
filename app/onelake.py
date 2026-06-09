@@ -1,54 +1,60 @@
 # ============================================
-# ONELAKE - Upload vers Fabric automatique
+# SUPABASE UPLOAD - Remplace OneLake/Fabric
 # ============================================
-from azure.storage.filedatalake import DataLakeServiceClient
-from azure.identity import AzureCliCredential
-import json
 import os
+from datetime import datetime
+from dotenv import load_dotenv
+from supabase import create_client
 
-ACCOUNT_NAME  = "onelake"
-WORKSPACE     = "liptonws"
-LAKEHOUSE     = "smartwardrobe_lakehouse.Lakehouse"
-ACCOUNT_URL   = f"https://{ACCOUNT_NAME}.dfs.fabric.microsoft.com"
+load_dotenv(r"C:\Projects\smartwardrobe\.env")
 
-def get_client():
-    credential = AzureCliCredential()
-    return DataLakeServiceClient(
-        account_url=ACCOUNT_URL,
-        credential=credential
-    )
+supabase = create_client(
+    os.getenv("SUPABASE_URL"),
+    os.getenv("SUPABASE_KEY")
+)
 
-def upload_new_item(item_dict: dict, filename: str):
+def upload_new_item(item_dict: dict, filename: str = None):
     """
-    Upload un vêtement JSON vers Files/bronze/new_items/ dans Fabric
+    Insère un vêtement directement dans Supabase
     """
-    client     = get_client()
-    fs_client  = client.get_file_system_client(WORKSPACE)
-    file_path  = f"{LAKEHOUSE}/Files/bronze/new_items/{filename}"
-    file_client = fs_client.get_file_client(file_path)
+    record = {
+        "item_name":       item_dict.get("item_name"),
+        "category":        item_dict.get("category"),
+        "subcategory":     item_dict.get("subcategory"),
+        "color":           item_dict.get("color"),
+        "material":        item_dict.get("material"),
+        "warmth_level":    int(item_dict.get("warmth_level", 2)),
+        "formality_level": int(item_dict.get("formality_level", 2)),
+        "season":          item_dict.get("season", "Toutes"),
+        "condition":       item_dict.get("condition", "Bon"),
+        "is_active":       True,
+        "created_at":      datetime.today().strftime("%Y-%m-%d")
+    }
 
-    content = json.dumps(item_dict, indent=2, ensure_ascii=False)
-    file_client.upload_data(content, overwrite=True)
-    print(f"✅ Uploadé : {file_path}")
+    result = supabase.table("vetements").insert(record).execute()
+    print(f"✅ Vêtement ajouté dans Supabase : {record['item_name']}")
+    return result
 
-def upload_feedback(feedback_dict: dict, filename: str):
+def upload_feedback(feedback_dict: dict, filename: str = None):
     """
-    Upload un feedback JSON vers Files/bronze/feedback/ dans Fabric
+    Insère un feedback directement dans Supabase
     """
-    client      = get_client()
-    fs_client   = client.get_file_system_client(WORKSPACE)
-    file_path   = f"{LAKEHOUSE}/Files/bronze/feedback/{filename}"
-    file_client = fs_client.get_file_client(file_path)
+    record = {
+        "nom_vetement":  feedback_dict.get("item_name"),
+        "signal":        int(feedback_dict.get("signal", 0)),
+        "type_contexte": feedback_dict.get("context_type"),
+        "temp_moyenne":  float(feedback_dict.get("temp_avg", 0)),
+        "weathercode":   int(feedback_dict.get("weathercode", 0)),
+        "cree_le":       datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    }
 
-    content = json.dumps(feedback_dict, indent=2, ensure_ascii=False)
-    file_client.upload_data(content, overwrite=True)
-    print(f"✅ Feedback uploadé : {file_path}")
+    result = supabase.table("retours").insert(record).execute()
+    print(f"✅ Feedback uploadé dans Supabase : {record['nom_vetement']}")
+    return result
 
 if __name__ == "__main__":
-    # Test de connexion
     try:
-        client    = get_client()
-        fs_client = client.get_file_system_client(WORKSPACE)
-        print("✅ Connexion OneLake OK")
+        result = supabase.table("vetements").select("id").limit(1).execute()
+        print("✅ Connexion Supabase OK")
     except Exception as e:
         print(f"❌ Erreur : {e}")

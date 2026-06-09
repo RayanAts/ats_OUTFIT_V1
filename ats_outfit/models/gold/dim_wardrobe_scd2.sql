@@ -4,7 +4,6 @@
 -- ============================================
 
 WITH current_data AS (
-
     SELECT
         item_id,
         item_name,
@@ -18,13 +17,11 @@ WITH current_data AS (
         condition,
         is_active,
         created_at,
-        dbt_loaded_at
-    FROM smartwardrobe_warehouse.dbo.stg_wardrobe
-
+        NOW() AS dbt_loaded_at
+    FROM {{ ref('stg_wardrobe') }}
 ),
 
 scd2 AS (
-
     SELECT
         item_id,
         item_name,
@@ -38,20 +35,17 @@ scd2 AS (
         condition,
         is_active,
         created_at,
-        dbt_loaded_at                               AS valid_from,
-        CAST('9999-12-31' AS DATE)                  AS valid_to,
-        1                                           AS is_current,
-        CAST(HASHBYTES('MD5',
-            CONCAT(
-                CAST(item_id AS VARCHAR),
-                item_name,
-                CAST(warmth_level AS VARCHAR),
-                CAST(formality_level AS VARCHAR),
-                condition
-            )
-        ) AS VARBINARY(16))                         AS row_hash
+        dbt_loaded_at                       AS valid_from,
+        CAST('9999-12-31' AS DATE)          AS valid_to,
+        1                                   AS is_current,
+        MD5(CONCAT(
+            CAST(item_id AS VARCHAR),
+            item_name,
+            CAST(warmth_level AS VARCHAR),
+            CAST(formality_level AS VARCHAR),
+            condition
+        ))                                  AS row_hash
     FROM current_data
-
 )
 
 SELECT * FROM scd2
