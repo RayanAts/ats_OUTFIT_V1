@@ -54,6 +54,50 @@ def generate_avatar_svg(recs_data):
     haut_color  = "#E0D8CE"
     bas_color   = "#C8C0B4"
     shoes_color = "#8B7355"
+
+    for item in recs_data:
+        cat   = item.get("category", "")
+        color = get_color(item.get("color", ""))
+        if cat == "Haut":
+            haut_color = color
+        elif cat == "Bas":
+            bas_color = color
+        elif cat == "Chaussures":
+            shoes_color = color
+
+    skin = "#D4A574"
+    hair = "#2C1810"
+
+    return f"""
+    <div style="background:white;border:1px solid rgba(13,27,42,0.08);
+    border-radius:16px;padding:1.5rem;margin-bottom:1rem">
+        <div style="font-size:0.72rem;color:#B8974A;text-transform:uppercase;
+        letter-spacing:0.1em;margin-bottom:1rem">👔 Aperçu de la tenue</div>
+        <div style="display:flex;justify-content:center">
+            <svg width="140" height="300" viewBox="0 0 160 340" xmlns="http://www.w3.org/2000/svg">
+                <ellipse cx="80" cy="35" rx="28" ry="32" fill="{skin}"/>
+                <ellipse cx="80" cy="18" rx="28" ry="16" fill="{hair}"/>
+                <rect x="52" y="18" width="56" height="12" fill="{hair}"/>
+                <rect x="72" y="64" width="16" height="14" fill="{skin}" rx="3"/>
+                <path d="M35 78 Q50 70 72 75 L72 78 Q80 76 88 78 L88 75 Q110 70 125 78 L130 160 Q80 170 30 160 Z" fill="{haut_color}"/>
+                <path d="M72 75 L80 90 L88 75" fill="none" stroke="{skin}" stroke-width="2"/>
+                <path d="M35 78 L15 130 Q12 140 18 142 L42 158 L50 110 Z" fill="{haut_color}"/>
+                <path d="M125 78 L145 130 Q148 140 142 142 L118 158 L110 110 Z" fill="{haut_color}"/>
+                <ellipse cx="16" cy="145" rx="8" ry="10" fill="{skin}"/>
+                <ellipse cx="144" cy="145" rx="8" ry="10" fill="{skin}"/>
+                <path d="M32 158 L30 260 L70 260 L80 210 L90 260 L130 260 L128 158 Z" fill="{bas_color}"/>
+                <rect x="28" y="258" width="44" height="12" fill="{shoes_color}" rx="6"/>
+                <rect x="88" y="258" width="44" height="12" fill="{shoes_color}" rx="6"/>
+                <ellipse cx="80" cy="282" rx="45" ry="6" fill="rgba(0,0,0,0.06)"/>
+            </svg>
+        </div>
+    </div>
+    """
+
+def generate_legend(recs_data):
+    haut_color  = "#E0D8CE"
+    bas_color   = "#C8C0B4"
+    shoes_color = "#8B7355"
     haut_name   = ""
     bas_name    = ""
     shoes_name  = ""
@@ -61,7 +105,7 @@ def generate_avatar_svg(recs_data):
     for item in recs_data:
         cat   = item.get("category", "")
         color = get_color(item.get("color", ""))
-        name  = item.get("item_name", "")
+        name  = str(item.get("item_name") or "")
         if cat == "Haut" and not haut_name:
             haut_color = color
             haut_name  = name
@@ -71,9 +115,6 @@ def generate_avatar_svg(recs_data):
         elif cat == "Chaussures" and not shoes_name:
             shoes_color = color
             shoes_name  = name
-
-    skin = "#D4A574"
-    hair = "#2C1810"
 
     legende = ""
     if haut_name:
@@ -112,33 +153,7 @@ def generate_avatar_svg(recs_data):
                 font-weight:700;color:#0D1B2A">{shoes_name[:25]}</div>
             </div>
         </div>"""
-
-    return f"""
-    <div style="background:white;border:1px solid rgba(13,27,42,0.08);
-    border-radius:16px;padding:1.5rem;margin-bottom:1rem">
-        <div style="font-size:0.72rem;color:#B8974A;text-transform:uppercase;
-        letter-spacing:0.1em;margin-bottom:1rem">👔 Aperçu de la tenue</div>
-        <div style="display:flex;justify-content:center;align-items:flex-start;gap:2rem">
-            <svg width="140" height="300" viewBox="0 0 160 340" xmlns="http://www.w3.org/2000/svg">
-                <ellipse cx="80" cy="35" rx="28" ry="32" fill="{skin}"/>
-                <ellipse cx="80" cy="18" rx="28" ry="16" fill="{hair}"/>
-                <rect x="52" y="18" width="56" height="12" fill="{hair}"/>
-                <rect x="72" y="64" width="16" height="14" fill="{skin}" rx="3"/>
-                <path d="M35 78 Q50 70 72 75 L72 78 Q80 76 88 78 L88 75 Q110 70 125 78 L130 160 Q80 170 30 160 Z" fill="{haut_color}"/>
-                <path d="M72 75 L80 90 L88 75" fill="none" stroke="{skin}" stroke-width="2"/>
-                <path d="M35 78 L15 130 Q12 140 18 142 L42 158 L50 110 Z" fill="{haut_color}"/>
-                <path d="M125 78 L145 130 Q148 140 142 142 L118 158 L110 110 Z" fill="{haut_color}"/>
-                <ellipse cx="16" cy="145" rx="8" ry="10" fill="{skin}"/>
-                <ellipse cx="144" cy="145" rx="8" ry="10" fill="{skin}"/>
-                <path d="M32 158 L30 260 L70 260 L80 210 L90 260 L130 260 L128 158 Z" fill="{bas_color}"/>
-                <rect x="28" y="258" width="44" height="12" fill="{shoes_color}" rx="6"/>
-                <rect x="88" y="258" width="44" height="12" fill="{shoes_color}" rx="6"/>
-                <ellipse cx="80" cy="282" rx="45" ry="6" fill="rgba(0,0,0,0.06)"/>
-            </svg>
-            <div style="padding-top:2rem">{legende}</div>
-        </div>
-    </div>
-    """
+    return f'<div style="padding-top:1rem">{legende.strip()}</div>'
 # ── Score Vibe ────────────────────────────────────────────────────────────────
 def get_vibe_score(recs_data):
     NEUTRES = ["Blanc", "Beige", "Gris", "Camel"]
@@ -174,6 +189,9 @@ with st.spinner("Analyse en cours..."):
     weather   = get_weather_context()
     calendar  = get_calendar_context()
     recs      = get_top_recommendations(offset=st.session_state.alternative_count)
+    if len(recs) == 0 and st.session_state.alternative_count > 0:
+        st.session_state.alternative_count = 0
+        recs = get_top_recommendations(offset=0)
     reco_date = get_recommendation_date()
     tomorrow  = get_tomorrow_context()
 
@@ -281,7 +299,11 @@ if not st.session_state.feedback_sent:
         {"category": row["category"], "color": row["color"], "item_name": row["item_name"]}
         for _, row in recs.iterrows()
     ]
-    st.markdown(generate_avatar_svg(recs_data), unsafe_allow_html=True)
+    col_av, col_lg = st.columns([3, 2])
+    with col_av:
+        st.markdown(generate_avatar_svg(recs_data), unsafe_allow_html=True)
+    with col_lg:
+        st.html(generate_legend(recs_data))
 
     # ── Vibe score ────────────────────────────────────────────────────────────
     vibe_emoji, vibe_label = get_vibe_score(recs_data)
@@ -456,6 +478,7 @@ else:
     st.markdown("<br>", unsafe_allow_html=True)
     if st.button("↺  Nouvelle recommandation", use_container_width=True, type="primary"):
         st.session_state.feedback_sent = False
+        st.session_state.alternative_count += 1
         st.rerun()
 
 # ── Navigation ────────────────────────────────────────────────────────────────

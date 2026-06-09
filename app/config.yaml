@@ -1,0 +1,18 @@
+credentials:
+  usernames:
+    rayan:
+      email: atikossierayan@gmail.com
+      name: Rayan
+      password: rayan123
+    invité1:
+      email: invite1@smartwardrobe.com
+      name: Invité 1
+      password: invite123
+
+cookie:
+  expiry_days: 30
+  key: smartwardrobe_secret_key
+  name: smartwardrobe_cookie
+
+preauthorized:
+  emails: []
