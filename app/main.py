@@ -1,10 +1,17 @@
 # ============================================
-# MAIN - Page de connexion SmartWardrobe
+# MAIN - Connexion SmartWardrobe
 # ============================================
 import streamlit as st
-import streamlit_authenticator as stauth
-import yaml
-from yaml.loader import SafeLoader
+import os
+from dotenv import load_dotenv
+from supabase import create_client
+
+load_dotenv(r"C:\Projects\smartwardrobe\.env")
+
+supabase = create_client(
+    os.getenv("SUPABASE_URL"),
+    os.getenv("SUPABASE_KEY")
+)
 
 st.set_page_config(
     page_title="SmartWardrobe",
@@ -12,53 +19,53 @@ st.set_page_config(
     layout="centered"
 )
 
-# ── Chargement config ─────────────────────────────────────────────────────────
-with open("config.yaml") as f:
-    config = yaml.load(f, Loader=SafeLoader)
+# ── State ─────────────────────────────────────────────────────────────────────
+if 'user_id' not in st.session_state:
+    st.session_state.user_id = None
+if 'username' not in st.session_state:
+    st.session_state.username = None
+if 'nom' not in st.session_state:
+    st.session_state.nom = None
+if 'ville' not in st.session_state:
+    st.session_state.ville = None
 
-# ── Authentification ──────────────────────────────────────────────────────────
-authenticator = stauth.Authenticate(
-    config['credentials'],
-    config['cookie']['name'],
-    config['cookie']['key'],
-    config['cookie']['expiry_days']
-)
+# ── Déjà connecté → redirect ──────────────────────────────────────────────────
+if st.session_state.user_id:
+    st.switch_page("pages/1_Recommandation.py")
 
 # ── Page de connexion ─────────────────────────────────────────────────────────
 st.markdown("""
 <div style="text-align:center;padding:3rem 0 2rem 0">
-    <div style="font-family:'Syne',sans-serif;font-size:2rem;
+    <div style="font-family:'Syne',sans-serif;font-size:2.5rem;
     font-weight:800;color:#0D1B2A">SmartWardrobe</div>
-    <div style="font-size:0.9rem;color:#8A8A8A;margin-top:0.5rem">
+    <div style="font-size:0.95rem;color:#8A8A8A;margin-top:0.5rem">
         Ton assistant vestimentaire personnel
     </div>
 </div>
 """, unsafe_allow_html=True)
 
-authenticator.login(
-    location="main",
-    fields={
-        "Form name": "Connexion",
-        "Username": "Nom d'utilisateur",
-        "Password": "Mot de passe",
-        "Login": "Se connecter"
-    }
-)
+with st.form("login_form"):
+    username = st.text_input("Nom d'utilisateur")
+    password = st.text_input("Mot de passe", type="password")
+    submit   = st.form_submit_button("Se connecter", use_container_width=True, type="primary")
 
-name                = st.session_state.get("name")
-authentication_status = st.session_state.get("authentication_status")
-username            = st.session_state.get("username")
+if submit:
+    if not username or not password:
+        st.error("Remplis tous les champs")
+    else:
+        result = supabase.table("utilisateurs") \
+            .select("*") \
+            .eq("username", username) \
+            .eq("password", password) \
+            .execute()
 
-if authentication_status:
-    # Stocker l'utilisateur dans la session
-    st.session_state['username'] = username
-    st.session_state['name']     = name
-
-    st.success(f"Bienvenue {name} ! 👋")
-    st.switch_page("pages/1_Recommandation.py")
-
-elif authentication_status is False:
-    st.error("Identifiants incorrects")
-
-elif authentication_status is None:
-    st.info("Connecte-toi pour accéder à SmartWardrobe")
+        if result.data:
+            user = result.data[0]
+            st.session_state.user_id  = user['id']
+            st.session_state.username = user['username']
+            st.session_state.nom      = user['nom']
+            st.session_state.ville    = user['ville']
+            st.success(f"Bienvenue {user['nom']} ! 👋")
+            st.switch_page("pages/1_Recommandation.py")
+        else:
+            st.error("Identifiants incorrects")

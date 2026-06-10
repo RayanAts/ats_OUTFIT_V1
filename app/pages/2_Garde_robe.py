@@ -20,13 +20,13 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ── Chargement ────────────────────────────────────────────────────────────────
-@st.cache_data(ttl=300)
+@st.cache_data(ttl=10)
 def load_wardrobe():
     return run_query("""
         SELECT item_id, item_name, category, subcategory,
                color, material, warmth_level, formality_level,
                season, condition, is_active
-        FROM dbo.stg_wardrobe
+        FROM public.stg_wardrobe
         ORDER BY category, formality_level DESC
     """)
 

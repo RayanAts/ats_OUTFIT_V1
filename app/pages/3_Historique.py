@@ -43,7 +43,7 @@ def load_wardrobe():
     return run_query("""
         SELECT item_name, category, color, material,
                warmth_level, formality_level
-        FROM dbo.stg_wardrobe
+        FROM public.stg_wardrobe
     """)
 
 feedbacks = load_feedbacks()
