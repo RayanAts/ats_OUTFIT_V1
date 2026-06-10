@@ -148,12 +148,18 @@ def save_recommendation_history():
 # ── Main ──────────────────────────────────────────────────────────────────────
 if __name__ == "__main__":
     import sys
-    no_dbt = "--no-dbt" in sys.argv
+    no_dbt      = "--no-dbt" in sys.argv
+    only_history = "--only-history" in sys.argv
 
     log("=== NIGHTLY PIPELINE DÉMARRÉ ===")
-    update_weather()
-    update_calendar()
-    if not no_dbt:
-        run_dbt()
+
+    if only_history:
         save_recommendation_history()
+    else:
+        update_weather()
+        update_calendar()
+        if not no_dbt:
+            run_dbt()
+            save_recommendation_history()
+
     log("=== PIPELINE TERMINÉ ===")
