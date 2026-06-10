@@ -56,3 +56,11 @@ jobs:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
         run: python nightly_pipeline.py --only-history
+
+
+      - name: Debug profiles
+        env:
+          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+        run: |
+          echo "Password length: ${#SUPABASE_DB_PASSWORD}"
+          cat /home/runner/.dbt/profiles.yml | sed 's/password:.*/password: [HIDDEN]/'
