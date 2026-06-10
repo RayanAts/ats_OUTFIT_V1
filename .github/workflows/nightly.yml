@@ -29,26 +29,25 @@ jobs:
           SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
         run: python nightly_pipeline.py --no-dbt
 
-      - name: Create dbt profiles
+      - name: Run dbt
         env:
           SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
         run: |
           mkdir -p /home/runner/.dbt
-          echo "ats_outfit:
+          cat > /home/runner/.dbt/profiles.yml << EOF
+          ats_outfit:
             target: dev
             outputs:
               dev:
                 type: postgres
                 host: aws-1-eu-central-1.pooler.supabase.com
                 user: postgres.wvqntpaovovtpwxunkxd
-                password: ${SUPABASE_DB_PASSWORD}
+                password: $SUPABASE_DB_PASSWORD
                 port: 6543
                 dbname: postgres
                 schema: public
-                threads: 4" > /home/runner/.dbt/profiles.yml
-
-      - name: Run dbt
-        run: |
+                threads: 4
+          EOF
           cd ats_outfit
           dbt run
 
