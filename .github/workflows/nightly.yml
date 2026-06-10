@@ -19,7 +19,9 @@ jobs:
           python-version: '3.11'
 
       - name: Install dependencies
-        run: pip install requests supabase python-dotenv dbt-postgres
+        run:  |
+          pip install requests supabase python-dotenv
+          pip install "dbt-core==1.8.0" "dbt-postgres==1.8.0"
 
       - name: Run weather + calendar
         env:
