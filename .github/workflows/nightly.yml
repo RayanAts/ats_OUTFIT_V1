@@ -29,6 +29,17 @@ jobs:
           SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
         run: python nightly_pipeline.py --no-dbt
 
+      - name: Debug password
+        env:
+          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+        run: |
+          echo "Longueur du mot de passe: ${#SUPABASE_DB_PASSWORD}"
+          if [ -z "$SUPABASE_DB_PASSWORD" ]; then
+            echo "❌ Mot de passe VIDE"
+          else
+            echo "✅ Mot de passe présent"
+          fi
+          
       - name: Run dbt
         env:
           SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
