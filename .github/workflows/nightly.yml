@@ -11,15 +11,15 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Setup Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
           python-version: '3.11'
 
       - name: Install dependencies
-        run:  |
+        run: |
           pip install requests supabase python-dotenv
           pip install "dbt-core==1.8.0" "dbt-postgres==1.8.0"
 
@@ -29,36 +29,31 @@ jobs:
           SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
         run: python nightly_pipeline.py --no-dbt
 
-      - name: Debug password
-        env:
-          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
-        run: |
-          echo "Longueur du mot de passe: ${#SUPABASE_DB_PASSWORD}"
-          if [ -z "$SUPABASE_DB_PASSWORD" ]; then
-            echo "❌ Mot de passe VIDE"
-          else
-            echo "✅ Mot de passe présent"
-          fi
-          
       - name: Run dbt
         env:
           SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
         run: |
           mkdir -p /home/runner/.dbt
-          cat > /home/runner/.dbt/profiles.yml << EOF
-          ats_outfit:
+          python - << 'PYEOF'
+          import os
+          password = os.environ['SUPABASE_DB_PASSWORD']
+          profiles = f"""ats_outfit:
             target: dev
             outputs:
               dev:
                 type: postgres
                 host: aws-1-eu-central-1.pooler.supabase.com
                 user: postgres.wvqntpaovovtpwxunkxd
-                password: $SUPABASE_DB_PASSWORD
+                password: {password}
                 port: 6543
                 dbname: postgres
                 schema: public
                 threads: 4
-          EOF
+          """
+          with open('/home/runner/.dbt/profiles.yml', 'w') as f:
+              f.write(profiles)
+          print(f"✅ profiles.yml créé — password length: {len(password)}")
+          PYEOF
           cd ats_outfit
           dbt run
 
@@ -67,11 +62,3 @@ jobs:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
         run: python nightly_pipeline.py --only-history
-
-
-      - name: Debug profiles
-        env:
-          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
-        run: |
-          echo "Password length: ${#SUPABASE_DB_PASSWORD}"
-          cat /home/runner/.dbt/profiles.yml | sed 's/password:.*/password: [HIDDEN]/'
