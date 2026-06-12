@@ -30,30 +30,23 @@ jobs:
         run: python nightly_pipeline.py --no-dbt
 
       - name: Run dbt
-        env:
-          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
         run: |
           mkdir -p /home/runner/.dbt
-          python - << 'PYEOF'
-          import os
-          password = os.environ['SUPABASE_DB_PASSWORD']
-          profiles = f"""ats_outfit:
+          cat << 'EOF' > /home/runner/.dbt/profiles.yml
+          ats_outfit:
             target: dev
             outputs:
               dev:
                 type: postgres
                 host: db.wvqntpaovovtpwxunkxd.supabase.co
                 user: postgres
-                password: {password}
+                password: "Clafoutis51@"
                 port: 5432
                 dbname: postgres
                 schema: public
                 threads: 4
-          """
-          with open('/home/runner/.dbt/profiles.yml', 'w') as f:
-              f.write(profiles)
-          print(f"✅ profiles.yml créé — password length: {len(password)}")
-          PYEOF
+          EOF
+          print "✅ profiles.yml créé directement"
           cd ats_outfit
           dbt run
 
