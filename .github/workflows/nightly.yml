@@ -38,10 +38,10 @@ jobs:
             outputs:
               dev:
                 type: postgres
-                host: db.wvqntpaovovtpwxunkxd.supabase.co
-                user: postgres
+                host: aws-1-eu-central-1.pooler.supabase.com
+                user: postgres.wvqntpaovovtpwxunkxd
                 password: "Taslescrampte?Apagnan7"
-                port: 5432
+                port: 6543
                 dbname: postgres
                 schema: public
                 threads: 4
