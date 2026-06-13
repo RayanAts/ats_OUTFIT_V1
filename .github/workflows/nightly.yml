@@ -40,7 +40,7 @@ jobs:
                 type: postgres
                 host: db.wvqntpaovovtpwxunkxd.supabase.co
                 user: postgres
-                password: "Clafoutis51@"
+                password: "Taslescrampte?Apagnan7"
                 port: 5432
                 dbname: postgres
                 schema: public
