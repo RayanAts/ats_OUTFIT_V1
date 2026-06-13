@@ -46,7 +46,6 @@ jobs:
                 schema: public
                 threads: 4
           EOF
-          print "✅ profiles.yml créé directement"
           cd ats_outfit
           dbt run
 
