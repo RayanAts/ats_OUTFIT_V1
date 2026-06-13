@@ -40,7 +40,7 @@ jobs:
                 type: postgres
                 host: aws-1-eu-central-1.pooler.supabase.com
                 user: postgres.wvqntpaovovtpwxunkxd
-                password: "Taslescrampte?Apagnan7"
+                password: "${SUPABASE_DB_PASSWORD}"
                 port: 6543
                 dbname: postgres
                 schema: public
