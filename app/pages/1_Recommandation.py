@@ -12,6 +12,8 @@ load_dotenv(r"C:\Projects\smartwardrobe\.env")
 from styles import GLOBAL_CSS
 from recommender import get_top_recommendations, get_weather_context, get_calendar_context, get_tomorrow_context, run_query
 from feedback import save_feedback
+from auth import require_wardrobe
+USER_ID = require_wardrobe()
 
 st.set_page_config(page_title="SmartWardrobe", page_icon="👔", layout="centered")
 st.markdown(GLOBAL_CSS, unsafe_allow_html=True)
@@ -219,8 +221,7 @@ if 'alternative_count' not in st.session_state:
     st.session_state.alternative_count = 0
 
 # ── Chargement ────────────────────────────────────────────────────────────────
-# ── Chargement ────────────────────────────────────────────────────────────────
-USER_ID = st.session_state.get('user_id') or 1
+
 
 with st.spinner("Analyse en cours..."):
     weather   = get_weather_context()
@@ -230,9 +231,11 @@ with st.spinner("Analyse en cours..."):
     tomorrow  = get_tomorrow_context(user_id=USER_ID)
 
 # ── Header ────────────────────────────────────────────────────────────────────
-st.markdown("""
+NOM = st.session_state.get('nom', '')
+
+st.markdown(f"""
 <div class="sw-page-header">
-    <div class="sw-page-eyebrow">SmartWardrobe</div>
+    <div class="sw-page-eyebrow">SmartWardrobe · 👤 {NOM}</div>
     <h1 class="sw-page-title">Ta tenue du jour</h1>
     <p class="sw-page-sub">Sélectionnée selon la météo et ton agenda</p>
 </div>
@@ -334,7 +337,12 @@ if not st.session_state.feedback_sent:
         {"category": row["category"], "color": row["color"], "item_name": row["item_name"]}
         for _, row in recs.iterrows()
     ]
-    st.markdown(generate_avatar_with_legend(recs_data), unsafe_allow_html=True)
+    # Debug temporaire
+    if len(recs_data) == 0:
+        st.warning("⚠️ Aucune recommandation trouvée pour cet utilisateur")
+    else:
+        st.markdown(generate_avatar_with_legend(recs_data), unsafe_allow_html=True)
+
 
     # ── Vibe score ────────────────────────────────────────────────────────────
     vibe_emoji, vibe_label = get_vibe_score(recs_data)

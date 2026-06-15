@@ -15,8 +15,10 @@ supabase = create_client(
 
 def upload_new_item(item_dict: dict, filename: str = None):
     """
-    Insère un vêtement directement dans Supabase
+    Insère un vêtement directement dans Supabase + relance dbt
     """
+    import subprocess
+
     record = {
         "item_name":       item_dict.get("item_name"),
         "category":        item_dict.get("category"),
@@ -28,11 +30,22 @@ def upload_new_item(item_dict: dict, filename: str = None):
         "season":          item_dict.get("season", "Toutes"),
         "condition":       item_dict.get("condition", "Bon"),
         "is_active":       True,
-        "created_at":      datetime.today().strftime("%Y-%m-%d")
+        "created_at":      datetime.today().strftime("%Y-%m-%d"),
+        "user_id":         item_dict.get("user_id", 1)
     }
 
     result = supabase.table("vetements").insert(record).execute()
-    print(f"✅ Vêtement ajouté dans Supabase : {record['item_name']}")
+    print(f"✅ Vêtement ajouté : {record['item_name']} (user_id={record['user_id']})")
+
+    # Relancer dbt automatiquement
+    print("🔄 Recalcul des recommandations...")
+    subprocess.run(
+        [r"C:\Projects\smartwardrobe\dbt-env\Scripts\dbt.exe", "run"],
+        cwd=r"C:\Projects\smartwardrobe\ats_outfit",
+        capture_output=True
+    )
+    print("✅ Recommandations mises à jour !")
+
     return result
 
 def upload_feedback(feedback_dict: dict, filename: str = None):

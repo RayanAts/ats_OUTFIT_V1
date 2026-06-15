@@ -3,6 +3,7 @@
 # ============================================
 import streamlit as st
 import os
+import time
 from dotenv import load_dotenv
 from supabase import create_client
 
@@ -65,7 +66,22 @@ if submit:
             st.session_state.username = user['username']
             st.session_state.nom      = user['nom']
             st.session_state.ville    = user['ville']
-            st.success(f"Bienvenue {user['nom']} ! 👋")
-            st.switch_page("pages/1_Recommandation.py")
+
+            # Vérifier si la garde-robe est vide
+            wardrobe = supabase.table("vetements") \
+                .select("id") \
+                .eq("user_id", user['id']) \
+                .execute()
+
+            if len(wardrobe.data) == 0:
+                # Nouvel utilisateur → onboarding
+                st.success(f"Bienvenue {user['nom']} ! 👋 Commençons par construire ta garde-robe.")
+                time.sleep(1)
+                st.switch_page("pages/4_Onboarding.py")
+            else:
+                # Utilisateur existant → page principale
+                st.success(f"Bon retour {user['nom']} ! 👋")
+                time.sleep(1)
+                st.switch_page("pages/1_Recommandation.py")
         else:
             st.error("Identifiants incorrects")

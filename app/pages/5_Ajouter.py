@@ -2,11 +2,14 @@
 # PAGE 5 - Ajouter un vetement
 # ============================================
 import streamlit as st
-import sys, os, json
+import sys, os
 from datetime import datetime
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from styles import GLOBAL_CSS
+from auth import require_wardrobe
+
+USER_ID = require_wardrobe()
 
 st.set_page_config(page_title="Ajouter · SmartWardrobe", page_icon="➕", layout="centered")
 st.markdown(GLOBAL_CSS, unsafe_allow_html=True)
@@ -56,11 +59,6 @@ SAISONS = {
     "Hiver":     "❄️",
 }
 
-NEW_ITEMS_DIR = os.path.join(
-    os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-    "new_items_local"
-)
-
 # ── State ─────────────────────────────────────────────────────────────────────
 if "step"  not in st.session_state: st.session_state.step  = 1
 if "item"  not in st.session_state: st.session_state.item  = {}
@@ -108,7 +106,7 @@ if st.session_state.added:
         <div style="font-family:'Syne',sans-serif;font-size:1.3rem;font-weight:800;
         color:#0D1B2A;margin-top:0.8rem">Vetement ajoute !</div>
         <div style="font-size:0.85rem;color:#8A8A8A;margin-top:0.4rem">
-            Il sera synchronise dans ta garde-robe automatiquement.
+            Il est maintenant dans ta garde-robe.
         </div>
     </div>
     """, unsafe_allow_html=True)
@@ -303,7 +301,6 @@ elif st.session_state.step == 4:
     color:#0D1B2A;margin-bottom:1.5rem">Quelques reglages rapides</p>
     """, unsafe_allow_html=True)
 
-    # Formalite
     st.markdown("""
     <div style="font-size:0.78rem;color:#8A8A8A;text-transform:uppercase;
     letter-spacing:0.1em;margin-bottom:0.3rem">Formalite</div>
@@ -322,10 +319,8 @@ elif st.session_state.step == 4:
         for d in range(5)
     ])
     st.markdown(f'<div style="margin-bottom:1.5rem">{dots_f}</div>', unsafe_allow_html=True)
-
     st.markdown('<div class="sw-divider"></div>', unsafe_allow_html=True)
 
-    # Chaleur
     st.markdown("""
     <div style="font-size:0.78rem;color:#8A8A8A;text-transform:uppercase;
     letter-spacing:0.1em;margin-bottom:0.3rem">Chaleur</div>
@@ -344,10 +339,8 @@ elif st.session_state.step == 4:
         for d in range(5)
     ])
     st.markdown(f'<div style="margin-bottom:1.5rem">{dots_w}</div>', unsafe_allow_html=True)
-
     st.markdown('<div class="sw-divider"></div>', unsafe_allow_html=True)
 
-    # Etat
     st.markdown("""
     <div style="font-size:0.78rem;color:#8A8A8A;text-transform:uppercase;
     letter-spacing:0.1em;margin-bottom:0.8rem">Etat du vetement</div>
@@ -400,7 +393,6 @@ elif st.session_state.step == 5:
     st.markdown(f"""
     <div style="background:white;border:1px solid rgba(13,27,42,0.08);
     border-radius:16px;padding:1.5rem;margin-bottom:1.5rem">
-
         <div style="display:flex;align-items:center;gap:1rem;margin-bottom:1.2rem">
             <div style="font-size:2.5rem">{emoji}</div>
             <div>
@@ -411,7 +403,6 @@ elif st.session_state.step == 5:
                 </div>
             </div>
         </div>
-
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin-bottom:1.2rem">
             <div>
                 <div style="font-size:0.7rem;color:#8A8A8A;text-transform:uppercase;
@@ -438,19 +429,16 @@ elif st.session_state.step == 5:
                 <div style="font-size:0.88rem;color:#0D1B2A">{item.get("condition","")}</div>
             </div>
         </div>
-
         <div style="margin-bottom:0.8rem">
             <div style="font-size:0.7rem;color:#8A8A8A;text-transform:uppercase;
             letter-spacing:0.1em;margin-bottom:0.4rem">Formalite</div>
             {dots_f}
         </div>
-
         <div>
             <div style="font-size:0.7rem;color:#8A8A8A;text-transform:uppercase;
             letter-spacing:0.1em;margin-bottom:0.4rem">Chaleur</div>
             {dots_w}
         </div>
-
     </div>
     """, unsafe_allow_html=True)
 
@@ -465,7 +453,6 @@ elif st.session_state.step == 5:
         if st.button("✓ Ajouter", use_container_width=True, type="primary", key="btn_add"):
             try:
                 from onelake import upload_new_item
-                from datetime import datetime
 
                 today = datetime.today().strftime("%Y-%m-%d")
                 now   = datetime.today().strftime("%Y%m%d_%H%M%S")
@@ -481,13 +468,12 @@ elif st.session_state.step == 5:
                     "season":          item["season"],
                     "condition":       item["condition"],
                     "is_active":       True,
-                    "created_at":      today
+                    "created_at":      today,
+                    "user_id":         USER_ID
                 }
 
-                filename = f"new_item_{now}.json"
-
-                with st.spinner("Synchronisation avec ta garde-robe..."):
-                    upload_new_item(new_item, filename)
+                with st.spinner("Ajout dans ta garde-robe..."):
+                    upload_new_item(new_item, f"new_item_{now}.json")
 
                 st.session_state.added = True
                 st.rerun()

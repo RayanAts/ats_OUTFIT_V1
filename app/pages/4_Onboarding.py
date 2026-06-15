@@ -6,6 +6,7 @@ import sys, os
 from dotenv import load_dotenv
 from supabase import create_client
 from datetime import datetime
+import subprocess
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 load_dotenv(r"C:\Projects\smartwardrobe\.env")
@@ -24,34 +25,34 @@ NOM     = st.session_state.get('nom', 'toi')
 # ── Catalogue ─────────────────────────────────────────────────────────────────
 CATALOGUE = {
     "Haut": [
-        {"type": "Chemise",          "emoji": "👔", "subcategory": "Chemise",    "formality": 5, "warmth": 1},
-        {"type": "Blazer",           "emoji": "🥼", "subcategory": "Blazer",     "formality": 5, "warmth": 2},
-        {"type": "Veste costume",    "emoji": "🧥", "subcategory": "Blazer",     "formality": 5, "warmth": 2},
-        {"type": "Pull quarter zip", "emoji": "🧶", "subcategory": "Pull",       "formality": 4, "warmth": 3},
-        {"type": "Pull col rond",    "emoji": "🧶", "subcategory": "Pull",       "formality": 3, "warmth": 4},
-        {"type": "Sweat col rond",   "emoji": "👕", "subcategory": "Sweat",      "formality": 2, "warmth": 3},
-        {"type": "T-shirt basique",  "emoji": "👕", "subcategory": "T-shirt",    "formality": 1, "warmth": 1},
-        {"type": "T-shirt oversize", "emoji": "👕", "subcategory": "T-shirt",    "formality": 1, "warmth": 1},
-        {"type": "Doudoune",         "emoji": "🦺", "subcategory": "Doudoune",   "formality": 1, "warmth": 5},
-        {"type": "Veste bomber",     "emoji": "🧥", "subcategory": "Veste",      "formality": 2, "warmth": 3},
-        {"type": "Hoodie",           "emoji": "👕", "subcategory": "Sweat",      "formality": 1, "warmth": 3},
-        {"type": "Polo",             "emoji": "👕", "subcategory": "Chemise",    "formality": 3, "warmth": 1},
+        {"type": "Chemise",          "emoji": "👔", "subcategory": "Chemise",  "formality": 5, "warmth": 1},
+        {"type": "Blazer",           "emoji": "🥼", "subcategory": "Blazer",   "formality": 5, "warmth": 2},
+        {"type": "Veste costume",    "emoji": "🧥", "subcategory": "Blazer",   "formality": 5, "warmth": 2},
+        {"type": "Pull quarter zip", "emoji": "🧶", "subcategory": "Pull",     "formality": 4, "warmth": 3},
+        {"type": "Pull col rond",    "emoji": "🧶", "subcategory": "Pull",     "formality": 3, "warmth": 4},
+        {"type": "Sweat col rond",   "emoji": "👕", "subcategory": "Sweat",    "formality": 2, "warmth": 3},
+        {"type": "T-shirt basique",  "emoji": "👕", "subcategory": "T-shirt",  "formality": 1, "warmth": 1},
+        {"type": "T-shirt oversize", "emoji": "👕", "subcategory": "T-shirt",  "formality": 1, "warmth": 1},
+        {"type": "Doudoune",         "emoji": "🦺", "subcategory": "Doudoune", "formality": 1, "warmth": 5},
+        {"type": "Veste bomber",     "emoji": "🧥", "subcategory": "Veste",    "formality": 2, "warmth": 3},
+        {"type": "Hoodie",           "emoji": "👕", "subcategory": "Sweat",    "formality": 1, "warmth": 3},
+        {"type": "Polo",             "emoji": "👕", "subcategory": "Chemise",  "formality": 3, "warmth": 1},
     ],
     "Bas": [
-        {"type": "Pantalon costume", "emoji": "👖", "subcategory": "Pantalon",   "formality": 4, "warmth": 2},
-        {"type": "Jean slim",        "emoji": "👖", "subcategory": "Jean",       "formality": 2, "warmth": 2},
-        {"type": "Jean large",       "emoji": "👖", "subcategory": "Jean",       "formality": 2, "warmth": 2},
-        {"type": "Chino",            "emoji": "👖", "subcategory": "Chino",      "formality": 3, "warmth": 2},
-        {"type": "Cargo",            "emoji": "👖", "subcategory": "Pantalon",   "formality": 2, "warmth": 2},
-        {"type": "Short",            "emoji": "🩳", "subcategory": "Short",      "formality": 1, "warmth": 1},
+        {"type": "Pantalon costume", "emoji": "👖", "subcategory": "Pantalon", "formality": 4, "warmth": 2},
+        {"type": "Jean slim",        "emoji": "👖", "subcategory": "Jean",     "formality": 2, "warmth": 2},
+        {"type": "Jean large",       "emoji": "👖", "subcategory": "Jean",     "formality": 2, "warmth": 2},
+        {"type": "Chino",            "emoji": "👖", "subcategory": "Chino",    "formality": 3, "warmth": 2},
+        {"type": "Cargo",            "emoji": "👖", "subcategory": "Pantalon", "formality": 2, "warmth": 2},
+        {"type": "Short",            "emoji": "🩳", "subcategory": "Short",    "formality": 1, "warmth": 1},
     ],
     "Chaussures": [
-        {"type": "Sneaker basique",  "emoji": "👟", "subcategory": "Sneaker",    "formality": 2, "warmth": 1},
-        {"type": "Sneaker colorée",  "emoji": "👟", "subcategory": "Sneaker",    "formality": 1, "warmth": 1},
-        {"type": "Richelieu",        "emoji": "👞", "subcategory": "Richelieu",  "formality": 5, "warmth": 1},
-        {"type": "Mocassin",         "emoji": "👞", "subcategory": "Mocassin",   "formality": 4, "warmth": 1},
+        {"type": "Sneaker basique",  "emoji": "👟", "subcategory": "Sneaker",     "formality": 2, "warmth": 1},
+        {"type": "Sneaker colorée",  "emoji": "👟", "subcategory": "Sneaker",     "formality": 1, "warmth": 1},
+        {"type": "Richelieu",        "emoji": "👞", "subcategory": "Richelieu",   "formality": 5, "warmth": 1},
+        {"type": "Mocassin",         "emoji": "👞", "subcategory": "Mocassin",    "formality": 4, "warmth": 1},
         {"type": "Chelsea boot",     "emoji": "👢", "subcategory": "Chelsea Boot","formality": 3, "warmth": 2},
-        {"type": "Boot casual",      "emoji": "🥾", "subcategory": "Boot",       "formality": 2, "warmth": 2},
+        {"type": "Boot casual",      "emoji": "🥾", "subcategory": "Boot",        "formality": 2, "warmth": 2},
     ]
 }
 
@@ -68,20 +69,19 @@ COULEURS = [
     {"nom": "Bordeaux", "hex": "#722F37"},
 ]
 
+COULEURS_LIGHT = ["Blanc", "Beige", "Camel", "Gris"]
+
 # ── State ─────────────────────────────────────────────────────────────────────
-if 'onb_step' not in st.session_state:
-    st.session_state.onb_step = 1
-if 'onb_selections' not in st.session_state:
-    st.session_state.onb_selections = []
-if 'onb_current_item' not in st.session_state:
-    st.session_state.onb_current_item = None
-if 'onb_category' not in st.session_state:
-    st.session_state.onb_category = "Haut"
+if 'onb_step'         not in st.session_state: st.session_state.onb_step         = 1
+if 'onb_selections'   not in st.session_state: st.session_state.onb_selections   = []
+if 'onb_current_item' not in st.session_state: st.session_state.onb_current_item = None
+if 'onb_category'     not in st.session_state: st.session_state.onb_category     = "Haut"
+if 'onb_colors_sel'   not in st.session_state: st.session_state.onb_colors_sel   = []
 
 # ── Progress bar ──────────────────────────────────────────────────────────────
-steps = ["Hauts", "Bas", "Chaussures", "Confirmation"]
+steps   = ["Hauts", "Bas", "Chaussures", "Confirmation"]
 current = ["Haut", "Bas", "Chaussures"].index(st.session_state.onb_category) if st.session_state.onb_step < 4 else 3
-progress = (current) / 3
+progress = current / 3
 
 st.markdown(f"""
 <div style="margin-bottom:1.5rem">
@@ -106,7 +106,7 @@ st.markdown(f"""
 # ÉTAPES 1-3 — Sélection par catégorie
 # ══════════════════════════════════════════════════════════════════════════════
 if st.session_state.onb_step in [1, 2, 3]:
-    cat = st.session_state.onb_category
+    cat   = st.session_state.onb_category
     items = CATALOGUE[cat]
 
     st.markdown(f"""
@@ -116,9 +116,10 @@ if st.session_state.onb_step in [1, 2, 3]:
     </div>
     """, unsafe_allow_html=True)
 
-    # ── Si on choisit la couleur d'un item ────────────────────────────────────
+    # ── Mode sélection couleurs pour un item ──────────────────────────────────
     if st.session_state.onb_current_item:
         item = st.session_state.onb_current_item
+
         st.markdown(f"""
         <div style="background:white;border:2px solid #B8974A;border-radius:14px;
         padding:1.2rem;margin-bottom:1rem;text-align:center">
@@ -126,76 +127,101 @@ if st.session_state.onb_step in [1, 2, 3]:
             <div style="font-family:'Syne',sans-serif;font-size:1rem;
             font-weight:700;color:#0D1B2A">{item['type']}</div>
             <div style="font-size:0.8rem;color:#8A8A8A;margin-top:0.3rem">
-                Choisis la couleur
+                Clique sur toutes les couleurs que tu as
             </div>
         </div>
         """, unsafe_allow_html=True)
 
-        # Grille couleurs
+        # Grille couleurs — sélection MULTIPLE
         cols = st.columns(5)
         for idx, couleur in enumerate(COULEURS):
             with cols[idx % 5]:
-                border = "3px solid #B8974A" if couleur['nom'] == st.session_state.get('selected_color') else "2px solid #E0D8CE"
-                if st.button(
-                    couleur['nom'],
-                    key=f"col_{couleur['nom']}",
-                    use_container_width=True
-                ):
-                    st.session_state.selected_color = couleur['nom']
+                is_sel  = couleur['nom'] in st.session_state.onb_colors_sel
+                txt_clr = "#0D1B2A" if couleur['nom'] in COULEURS_LIGHT else "white"
+                check   = "✓" if is_sel else ""
+                border  = "3px solid #B8974A" if is_sel else "1px solid #E0D8CE"
+
+                st.markdown(f"""
+                <div style="text-align:center;margin-bottom:0.3rem">
+                    <div style="height:38px;border-radius:8px;background:{couleur['hex']};
+                    border:{border};display:flex;align-items:center;justify-content:center;
+                    font-size:0.9rem;color:{txt_clr};font-weight:700">{check}</div>
+                    <div style="font-size:0.65rem;color:#8A8A8A;margin-top:0.2rem">{couleur['nom']}</div>
+                </div>
+                """, unsafe_allow_html=True)
+
+                if st.button(couleur['nom'], key=f"col_{couleur['nom']}", use_container_width=True):
+                    if couleur['nom'] in st.session_state.onb_colors_sel:
+                        st.session_state.onb_colors_sel.remove(couleur['nom'])
+                    else:
+                        st.session_state.onb_colors_sel.append(couleur['nom'])
                     st.rerun()
 
-        if st.session_state.get('selected_color'):
-            col1, col2 = st.columns(2)
-            with col1:
-                if st.button("← Retour", use_container_width=True, type="secondary"):
-                    st.session_state.onb_current_item = None
-                    st.session_state.selected_color = None
-                    st.rerun()
-            with col2:
-                if st.button(f"✓ Ajouter en {st.session_state.selected_color}", use_container_width=True, type="primary"):
+        # Résumé couleurs sélectionnées
+        if st.session_state.onb_colors_sel:
+            st.markdown(f"""
+            <div style="padding:0.8rem 1rem;background:#F7F5F0;border-radius:10px;
+            font-size:0.82rem;color:#0D1B2A;margin-top:0.5rem">
+                <b>Sélectionnées :</b> {' · '.join(st.session_state.onb_colors_sel)}
+                → <b>{len(st.session_state.onb_colors_sel)} vêtement(s)</b>
+            </div>
+            """, unsafe_allow_html=True)
+
+        st.markdown("<br>", unsafe_allow_html=True)
+        col1, col2 = st.columns(2)
+        with col1:
+            if st.button("← Retour", use_container_width=True, type="secondary"):
+                st.session_state.onb_current_item = None
+                st.session_state.onb_colors_sel   = []
+                st.rerun()
+        with col2:
+            nb = len(st.session_state.onb_colors_sel)
+            if st.button(
+                f"✓ Ajouter {nb} {item['type']}{'s' if nb > 1 else ''}",
+                use_container_width=True,
+                type="primary",
+                disabled=nb == 0
+            ):
+                for couleur in st.session_state.onb_colors_sel:
                     st.session_state.onb_selections.append({
                         "type":        item['type'],
                         "emoji":       item['emoji'],
                         "category":    cat,
                         "subcategory": item['subcategory'],
-                        "color":       st.session_state.selected_color,
+                        "color":       couleur,
                         "formality":   item['formality'],
                         "warmth":      item['warmth'],
                     })
-                    st.session_state.onb_current_item = None
-                    st.session_state.selected_color = None
-                    st.success(f"✅ {item['type']} {st.session_state.get('selected_color', '')} ajouté !")
-                    st.rerun()
+                st.success(f"✅ {nb} {item['type']}(s) ajouté(s) !")
+                st.session_state.onb_current_item = None
+                st.session_state.onb_colors_sel   = []
+                st.rerun()
 
     else:
         # ── Grille des types de vêtements ─────────────────────────────────────
         cols = st.columns(3)
         for idx, item in enumerate(items):
             with cols[idx % 3]:
-                # Compter combien de fois ce type est déjà sélectionné
-                count = sum(1 for s in st.session_state.onb_selections
-                           if s['type'] == item['type'] and s['category'] == cat)
-
-                badge = f" +{count}" if count > 0 else ""
-                bg = "rgba(184,151,74,0.1)" if count > 0 else "white"
-                border = "2px solid #B8974A" if count > 0 else "1px solid rgba(13,27,42,0.08)"
-
+                count  = sum(1 for s in st.session_state.onb_selections
+                            if s['type'] == item['type'] and s['category'] == cat)
+                badge  = f" +{count}" if count > 0 else ""
                 if st.button(
                     f"{item['emoji']} {item['type']}{badge}",
                     key=f"item_{cat}_{idx}",
                     use_container_width=True
                 ):
                     st.session_state.onb_current_item = item
-                    st.session_state.selected_color = None
+                    st.session_state.onb_colors_sel   = []
                     st.rerun()
 
-        # ── Sélections actuelles ──────────────────────────────────────────────
+        # Résumé sélections
         cat_selections = [s for s in st.session_state.onb_selections if s['category'] == cat]
         if cat_selections:
             st.markdown(f"""
             <div style="margin-top:1rem;padding:0.8rem 1rem;background:#F7F5F0;
             border-radius:10px;font-size:0.82rem;color:#0D1B2A">
-                <b>Sélectionnés :</b> {' · '.join([f"{s['emoji']} {s['type']} {s['color']}" for s in cat_selections])}
+                <b>Sélectionnés ({len(cat_selections)}) :</b><br>
+                {' · '.join([f"{s['emoji']} {s['type']} {s['color']}" for s in cat_selections])}
             </div>
             """, unsafe_allow_html=True)
 
@@ -206,7 +232,7 @@ if st.session_state.onb_step in [1, 2, 3]:
             if st.session_state.onb_step > 1:
                 if st.button("← Retour", use_container_width=True, type="secondary"):
                     cats = ["Haut", "Bas", "Chaussures"]
-                    st.session_state.onb_step -= 1
+                    st.session_state.onb_step    -= 1
                     st.session_state.onb_category = cats[st.session_state.onb_step - 1]
                     st.rerun()
         with col2:
@@ -214,7 +240,7 @@ if st.session_state.onb_step in [1, 2, 3]:
             if st.button(next_label, use_container_width=True, type="primary"):
                 cats = ["Haut", "Bas", "Chaussures"]
                 if st.session_state.onb_step < 3:
-                    st.session_state.onb_step += 1
+                    st.session_state.onb_step    += 1
                     st.session_state.onb_category = cats[st.session_state.onb_step - 1]
                 else:
                     st.session_state.onb_step = 4
@@ -240,7 +266,6 @@ elif st.session_state.onb_step == 4:
     </div>
     """, unsafe_allow_html=True)
 
-    # Résumé par catégorie
     for cat in ["Haut", "Bas", "Chaussures"]:
         cat_items = [s for s in st.session_state.onb_selections if s['category'] == cat]
         if cat_items:
@@ -253,13 +278,12 @@ elif st.session_state.onb_step == 4:
     col1, col2 = st.columns(2)
     with col1:
         if st.button("← Modifier", use_container_width=True, type="secondary"):
-            st.session_state.onb_step = 1
+            st.session_state.onb_step     = 1
             st.session_state.onb_category = "Haut"
             st.rerun()
     with col2:
         if st.button("✓ Confirmer ma garde-robe", use_container_width=True, type="primary"):
-            # Enregistrer dans Supabase
-            today = datetime.today().strftime("%Y-%m-%d")
+            today   = datetime.today().strftime("%Y-%m-%d")
             records = []
             for item in st.session_state.onb_selections:
                 records.append({
@@ -277,11 +301,19 @@ elif st.session_state.onb_step == 4:
                     "user_id":         USER_ID
                 })
 
-            supabase.table("vetements").insert(records).execute()
+            with st.spinner(f"Enregistrement de {len(records)} vêtements..."):
+                supabase.table("vetements").insert(records).execute()
 
-            st.success(f"✅ {len(records)} vêtements ajoutés à ta garde-robe !")
-            st.session_state.onb_step = 1
-            st.session_state.onb_selections = []
+            with st.spinner("Calcul de tes premières recommandations..."):
+                subprocess.run(
+                    [r"C:\Projects\smartwardrobe\dbt-env\Scripts\dbt.exe", "run"],
+                    cwd=r"C:\Projects\smartwardrobe\ats_outfit",
+                    capture_output=True
+                )
+
+            st.success(f"✅ {len(records)} vêtements ajoutés — recommandations prêtes !")
+            st.session_state.onb_step         = 1
+            st.session_state.onb_selections   = []
             st.session_state.onb_current_item = None
 
             st.balloons()

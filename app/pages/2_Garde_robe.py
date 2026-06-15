@@ -8,6 +8,9 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from styles import GLOBAL_CSS
 from recommender import run_query
 
+from auth import require_wardrobe
+USER_ID = require_wardrobe()
+
 st.set_page_config(page_title="Garde-robe · SmartWardrobe", page_icon="👔", layout="centered")
 st.markdown(GLOBAL_CSS, unsafe_allow_html=True)
 
@@ -20,17 +23,18 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ── Chargement ────────────────────────────────────────────────────────────────
-@st.cache_data(ttl=10)
-def load_wardrobe():
-    return run_query("""
+@st.cache_data(ttl=30)
+def load_wardrobe(user_id):
+    return run_query(f"""
         SELECT item_id, item_name, category, subcategory,
                color, material, warmth_level, formality_level,
                season, condition, is_active
         FROM public.stg_wardrobe
+        WHERE user_id = {user_id}
         ORDER BY category, formality_level DESC
     """)
 
-df = load_wardrobe()
+df = load_wardrobe(USER_ID)
 
 # ── Stats ─────────────────────────────────────────────────────────────────────
 total      = len(df)

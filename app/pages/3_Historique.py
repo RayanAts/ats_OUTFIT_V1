@@ -2,7 +2,6 @@
 # PAGE 3 - Historique & Statistiques
 # ============================================
 import streamlit as st
-import json
 import os
 import sys
 from collections import Counter, defaultdict
@@ -10,6 +9,9 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from styles import GLOBAL_CSS
 from recommender import run_query
+from auth import require_wardrobe
+
+USER_ID = require_wardrobe()
 
 st.set_page_config(page_title="Historique · SmartWardrobe", page_icon="📊", layout="centered")
 st.markdown(GLOBAL_CSS, unsafe_allow_html=True)
@@ -22,32 +24,32 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 
-# ── Chargement ────────────────────────────────────────────────────────────────
-FEEDBACK_DIR = os.path.join(
-    os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-    "feedback_local"
-)
+# ── Chargement depuis Supabase ────────────────────────────────────────────────
+@st.cache_data(ttl=30)
+def load_feedbacks(user_id):
+    df = run_query(f"""
+        SELECT nom_vetement AS item_name,
+               signal,
+               type_contexte AS context_type,
+               temp_moyenne  AS temp_avg,
+               cree_le::DATE::TEXT AS feedback_date
+        FROM public.retours
+        WHERE user_id = {user_id}
+        ORDER BY cree_le DESC
+    """)
+    return df.to_dict('records') if len(df) > 0 else []
 
-def load_feedbacks():
-    feedbacks = []
-    if not os.path.exists(FEEDBACK_DIR):
-        return feedbacks
-    for fname in sorted(os.listdir(FEEDBACK_DIR), reverse=True):
-        if fname.endswith(".json"):
-            with open(os.path.join(FEEDBACK_DIR, fname), encoding="utf-8") as f:
-                feedbacks.append(json.load(f))
-    return feedbacks
-
-@st.cache_data(ttl=300)
-def load_wardrobe():
-    return run_query("""
+@st.cache_data(ttl=30)
+def load_wardrobe(user_id):
+    return run_query(f"""
         SELECT item_name, category, color, material,
                warmth_level, formality_level
         FROM public.stg_wardrobe
+        WHERE user_id = {user_id}
     """)
 
-feedbacks = load_feedbacks()
-wardrobe  = load_wardrobe()
+feedbacks = load_feedbacks(USER_ID)
+wardrobe  = load_wardrobe(USER_ID)
 
 # ── Etat vide ─────────────────────────────────────────────────────────────────
 if not feedbacks:
@@ -65,23 +67,23 @@ if not feedbacks:
 
 else:
     # ── Calculs ───────────────────────────────────────────────────────────────
-    total         = len(feedbacks)
-    accepted      = [f for f in feedbacks if f['signal'] == 1]
-    refused       = [f for f in feedbacks if f['signal'] == -1]
-    rate          = int((len(accepted) / total) * 100)
-    top_item      = Counter([f['item_name'] for f in accepted]).most_common(1)[0][0] if accepted else "—"
-    worst_item    = Counter([f['item_name'] for f in refused]).most_common(1)[0][0]  if refused  else "—"
-    top_context   = Counter([f['context_type'] for f in feedbacks]).most_common(1)[0][0]
-    temps         = [f['temp_avg'] for f in feedbacks]
-    avg_temp      = round(sum(temps) / len(temps), 1) if temps else 0
-    streak        = 0
+    total      = len(feedbacks)
+    accepted   = [f for f in feedbacks if f['signal'] == 1]
+    refused    = [f for f in feedbacks if f['signal'] == -1]
+    rate       = int((len(accepted) / total) * 100)
+    top_item   = Counter([f['item_name'] for f in accepted]).most_common(1)[0][0] if accepted else "—"
+    worst_item = Counter([f['item_name'] for f in refused]).most_common(1)[0][0]  if refused  else "—"
+    top_context = Counter([f['context_type'] for f in feedbacks]).most_common(1)[0][0]
+    temps      = [f['temp_avg'] for f in feedbacks if f['temp_avg']]
+    avg_temp   = round(sum(temps) / len(temps), 1) if temps else 0
+    streak     = 0
     for f in reversed(feedbacks):
         if f['signal'] == 1:
             streak += 1
         else:
             break
 
-    avg_formality = round(wardrobe['formality_level'].mean(), 1)
+    avg_formality = round(wardrobe['formality_level'].mean(), 1) if len(wardrobe) > 0 else 0
     top_color     = wardrobe['color'].mode()[0] if len(wardrobe) > 0 else "—"
 
     # ── Tabs ──────────────────────────────────────────────────────────────────
@@ -91,10 +93,8 @@ else:
     # TAB 1 — STATISTIQUES
     # ════════════════════════════════════════════════════════════════════════════
     with tab1:
-
         st.markdown("<br>", unsafe_allow_html=True)
 
-        # KPIs principaux
         st.markdown(f"""
         <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:1rem;margin-bottom:1.5rem">
             <div class="stat-block" style="padding:1.5rem">
@@ -124,7 +124,6 @@ else:
 
         st.markdown('<div class="sw-divider"></div>', unsafe_allow_html=True)
 
-        # Insights
         st.markdown("""
         <p style="font-family:'Syne',sans-serif;font-size:1rem;
         font-weight:700;color:#0D1B2A;margin-bottom:1rem">
@@ -133,9 +132,9 @@ else:
         """, unsafe_allow_html=True)
 
         insights = [
-            {"emoji": "👔", "label": "Vêtement favori",   "value": top_item,    "sub": "le plus accepté"},
-            {"emoji": "❌", "label": "Vêtement évité",    "value": worst_item,  "sub": "le plus refusé"},
-            {"emoji": "📅", "label": "Contexte dominant", "value": top_context, "sub": f"{total} interactions"},
+            {"emoji": "👔", "label": "Vêtement favori",   "value": top_item,        "sub": "le plus accepté"},
+            {"emoji": "❌", "label": "Vêtement évité",    "value": worst_item,      "sub": "le plus refusé"},
+            {"emoji": "📅", "label": "Contexte dominant", "value": top_context,     "sub": f"{total} interactions"},
             {"emoji": "🌡️", "label": "Temp. moyenne",     "value": f"{avg_temp}°C", "sub": "lors de tes sessions"},
         ]
 
@@ -159,7 +158,6 @@ else:
 
         st.markdown('<div class="sw-divider"></div>', unsafe_allow_html=True)
 
-        # Phrase Spotify Wrapped
         if rate >= 70:
             phrase = f"Tu sais ce que tu veux. {rate}% d'acceptation — ton style est clair et assumé."
             bg, border = "#f0fdf4", "#bbf7d0"
@@ -182,10 +180,8 @@ else:
     # TAB 2 — HISTORIQUE
     # ════════════════════════════════════════════════════════════════════════════
     with tab2:
-
         st.markdown("<br>", unsafe_allow_html=True)
 
-        # Stats rapides
         st.markdown(f"""
         <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:1rem;margin-bottom:1.5rem">
             <div class="stat-block">
@@ -203,7 +199,6 @@ else:
         </div>
         """, unsafe_allow_html=True)
 
-        # Filtre
         filtre = st.radio(
             "",
             ["Tous", "Acceptées", "Refusées"],
@@ -219,7 +214,6 @@ else:
 
         st.markdown("<br>", unsafe_allow_html=True)
 
-        # Timeline groupée par date
         grouped = defaultdict(list)
         for fb in filtered:
             grouped[fb['feedback_date']].append(fb)
