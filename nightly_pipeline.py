@@ -86,7 +86,10 @@ def update_weather():
 
 # ── Calendrier ────────────────────────────────────────────────────────────────
 def update_calendar():
-    log("Mise à jour calendrier...")
+    log("Mise à jour calendrier pour tous les utilisateurs...")
+
+    # Récupérer tous les utilisateurs
+    users = supabase.table("utilisateurs").select("id, ville").execute()
 
     context_types = [
         {"type_contexte": "bureau",         "label_contexte": "Semi-formel", "formalite_requise": 3, "exposition_exterieure": False},
@@ -96,23 +99,25 @@ def update_calendar():
         {"type_contexte": "soirée",         "label_contexte": "Élégant",     "formalite_requise": 4, "exposition_exterieure": False},
     ]
 
-    records = []
-    for i in range(30):
-        day = (datetime.today() + timedelta(days=i)).strftime("%Y-%m-%d")
-        ctx = random.choice(context_types)
-        records.append({
-            "date_evenement":       day,
-            "type_contexte":        ctx["type_contexte"],
-            "label_contexte":       ctx["label_contexte"],
-            "formalite_requise":    ctx["formalite_requise"],
-            "exposition_exterieure": ctx["exposition_exterieure"]
-        })
+    for user in users.data:
+        user_id = user['id']
+        records = []
+        for i in range(30):
+            day = (datetime.today() + timedelta(days=i)).strftime("%Y-%m-%d")
+            ctx = random.choice(context_types)
+            records.append({
+                "date_evenement":        day,
+                "type_contexte":         ctx["type_contexte"],
+                "label_contexte":        ctx["label_contexte"],
+                "formalite_requise":     ctx["formalite_requise"],
+                "exposition_exterieure": ctx["exposition_exterieure"],
+                "user_id":               user_id
+            })
 
-    # Supprimer et réécrire le calendrier
-    supabase.table("calendrier").delete().gte("date_evenement", datetime.today().strftime("%Y-%m-%d")).execute()
-    supabase.table("calendrier").insert(records).execute()
-
-    log(f"✅ Calendrier mis à jour — 30 jours")
+        # Supprimer et réécrire le calendrier de cet utilisateur
+        supabase.table("calendrier").delete().eq("user_id", user_id).gte("date_evenement", datetime.today().strftime("%Y-%m-%d")).execute()
+        supabase.table("calendrier").insert(records).execute()
+        log(f"✅ Calendrier mis à jour pour user_id={user_id}")
 
 # ── dbt run ───────────────────────────────────────────────────────────────────
 def run_dbt():

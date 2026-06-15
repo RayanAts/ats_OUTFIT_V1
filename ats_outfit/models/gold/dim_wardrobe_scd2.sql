@@ -17,6 +17,7 @@ WITH current_data AS (
         condition,
         is_active,
         created_at,
+        user_id,
         NOW() AS dbt_loaded_at
     FROM {{ ref('stg_wardrobe') }}
 ),
@@ -35,6 +36,7 @@ scd2 AS (
         condition,
         is_active,
         created_at,
+        user_id,
         dbt_loaded_at                       AS valid_from,
         CAST('9999-12-31' AS DATE)          AS valid_to,
         1                                   AS is_current,

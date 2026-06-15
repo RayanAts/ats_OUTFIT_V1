@@ -44,6 +44,7 @@ scoring AS (
         w.formality_level,
         w.season,
         w.condition,
+        w.user_id,
         wt.fetch_date,
         wt.temp_avg,
         wt.weather_label,
@@ -138,7 +139,6 @@ best_shoes AS (
     LIMIT 6
 ),
 
-
 final AS (
     SELECT * FROM best_haut
     UNION ALL SELECT * FROM best_bas
@@ -154,6 +154,7 @@ SELECT
     material,
     warmth_level,
     formality_level,
+    user_id,
     fetch_date              AS recommendation_date,
     temp_avg,
     weather_label,

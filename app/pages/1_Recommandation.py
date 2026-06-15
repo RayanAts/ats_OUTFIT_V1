@@ -36,11 +36,12 @@ def get_color(color_name):
     return COLOR_MAP.get(color_name, "#9E9E9E")
 
 # ── Recommendation date depuis Gold ──────────────────────────────────────────
-def get_recommendation_date():
+def get_recommendation_date(user_id=1):
     try:
-        result = run_query("""
+        result = run_query(f"""
             SELECT recommendation_date
             FROM public.gold_recommendation
+            WHERE user_id = {user_id}
             ORDER BY recommendation_date DESC
             LIMIT 1
         """)
@@ -218,15 +219,15 @@ if 'alternative_count' not in st.session_state:
     st.session_state.alternative_count = 0
 
 # ── Chargement ────────────────────────────────────────────────────────────────
+# ── Chargement ────────────────────────────────────────────────────────────────
+USER_ID = st.session_state.get('user_id') or 1
+
 with st.spinner("Analyse en cours..."):
     weather   = get_weather_context()
-    calendar  = get_calendar_context()
-    recs      = get_top_recommendations(offset=st.session_state.alternative_count)
-    if len(recs) == 0 and st.session_state.alternative_count > 0:
-        st.session_state.alternative_count = 0
-        recs = get_top_recommendations(offset=0)
-    reco_date = get_recommendation_date()
-    tomorrow  = get_tomorrow_context()
+    calendar  = get_calendar_context(user_id=USER_ID)
+    recs      = get_top_recommendations(offset=st.session_state.alternative_count, user_id=USER_ID)
+    reco_date = get_recommendation_date(user_id=USER_ID)
+    tomorrow  = get_tomorrow_context(user_id=USER_ID)
 
 # ── Header ────────────────────────────────────────────────────────────────────
 st.markdown("""
@@ -440,7 +441,6 @@ if not st.session_state.feedback_sent:
                 )
             st.session_state.feedback_sent = True
             st.session_state.accepted = True
-            st.session_state.alternative_count = 0
             st.rerun()
 
     with col_no:
@@ -456,7 +456,6 @@ if not st.session_state.feedback_sent:
                 )
             st.session_state.feedback_sent = True
             st.session_state.accepted = False
-            st.session_state.alternative_count = 0
             st.rerun()
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -506,8 +505,9 @@ else:
 
     st.markdown("<br>", unsafe_allow_html=True)
     if st.button("↺  Nouvelle recommandation", use_container_width=True, type="primary"):
+        import random
         st.session_state.feedback_sent = False
-        st.session_state.alternative_count += 1
+        st.session_state.alternative_count = random.randint(1, 5)
         st.rerun()
 
 # ── Navigation ────────────────────────────────────────────────────────────────

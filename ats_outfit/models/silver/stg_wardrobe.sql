@@ -15,7 +15,8 @@ cleaned AS (
         season,
         condition,
         is_active,
-        created_at
+        created_at,
+        user_id
     FROM source
     WHERE is_active = true
     AND item_name IS NOT NULL

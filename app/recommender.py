@@ -5,7 +5,7 @@ import pandas as pd
 from connector import run_query
 from datetime import datetime, timedelta
 
-def get_top_recommendations(offset=0):
+def get_top_recommendations(offset=0, user_id=1):
     query = f"""
         WITH ranked AS (
             SELECT
@@ -20,18 +20,19 @@ def get_top_recommendations(offset=0):
                     ORDER BY score_final DESC
                 ) AS rn
             FROM public.gold_recommendation
+            WHERE user_id = {user_id}
         )
         SELECT * FROM ranked
         WHERE rn = {offset + 1}
         ORDER BY rank_today
     """
-    result = run_query(query)
-    return result
+    return run_query(query)
 
-def get_recommendation_date():
-    query = """
+def get_recommendation_date(user_id=1):
+    query = f"""
         SELECT recommendation_date
         FROM public.gold_recommendation
+        WHERE user_id = {user_id}
         ORDER BY recommendation_date DESC
         LIMIT 1
     """
@@ -59,8 +60,8 @@ def get_weather_context():
     """
     return run_query(query).iloc[0]
 
-def get_calendar_context():
-    query = """
+def get_calendar_context(user_id=1):
+    query = f"""
         SELECT
             event_date,
             context_type,
@@ -69,12 +70,13 @@ def get_calendar_context():
             outdoor_exposure
         FROM public.stg_calendar
         WHERE event_date >= CURRENT_DATE
+        AND user_id = {user_id}
         ORDER BY event_date ASC
         LIMIT 1
     """
     return run_query(query).iloc[0]
 
-def get_tomorrow_context():
+def get_tomorrow_context(user_id=1):
     try:
         tomorrow = (datetime.today() + timedelta(days=1)).strftime("%Y-%m-%d")
         query = f"""
@@ -85,6 +87,7 @@ def get_tomorrow_context():
                 formality_required
             FROM public.stg_calendar
             WHERE event_date = '{tomorrow}'
+            AND user_id = {user_id}
             LIMIT 1
         """
         result = run_query(query)

@@ -1,6 +1,5 @@
 -- ============================================
 -- SILVER - Staging Calendar
-
 -- ============================================
 WITH source AS (
     SELECT * FROM public.calendrier
@@ -10,12 +9,13 @@ WITH source AS (
 
 cleaned AS (
     SELECT
-        date_evenement      AS event_date,
-        type_contexte       AS context_type,
-        label_contexte      AS context_label,
-        formalite_requise   AS formality_required,
+        date_evenement        AS event_date,
+        type_contexte         AS context_type,
+        label_contexte        AS context_label,
+        formalite_requise     AS formality_required,
         exposition_exterieure AS outdoor_exposure,
-        NOW()               AS dbt_loaded_at
+        user_id,
+        NOW()                 AS dbt_loaded_at
     FROM source
 )
 
