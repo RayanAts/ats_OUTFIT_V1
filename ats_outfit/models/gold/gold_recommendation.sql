@@ -23,7 +23,6 @@ calendar AS (
     FROM {{ ref('stg_calendar') }}
     WHERE event_date >= CURRENT_DATE
     ORDER BY event_date ASC
-    LIMIT 1
 ),
 
 recent_recs AS (
@@ -99,10 +98,16 @@ scoring AS (
 
         CASE WHEN r.nom_vetement IS NOT NULL THEN 0.3 ELSE 0.0 END AS recency_penalty
 
-    FROM wardrobe w
-    CROSS JOIN weather wt
-    CROSS JOIN calendar cal
-    LEFT JOIN recent_recs r ON w.item_name = r.nom_vetement
+FROM wardrobe w
+CROSS JOIN weather wt
+JOIN calendar cal ON cal.user_id = w.user_id
+    AND cal.event_date = (
+        SELECT MIN(event_date) 
+        FROM {{ ref('stg_calendar') }} 
+        WHERE user_id = w.user_id 
+        AND event_date >= CURRENT_DATE
+    )
+LEFT JOIN recent_recs r ON w.item_name = r.nom_vetement
 ),
 
 scored AS (
@@ -120,23 +125,26 @@ scored AS (
 
 best_haut AS (
     SELECT *, 1 AS rank_today
-    FROM scored WHERE category = 'Haut'
-    ORDER BY score_final DESC
-    LIMIT 6
+    FROM (
+        SELECT *, ROW_NUMBER() OVER (PARTITION BY user_id ORDER BY score_final DESC) AS rn
+        FROM scored WHERE category = 'Haut'
+    ) t WHERE rn <= 6
 ),
 
 best_bas AS (
     SELECT *, 2 AS rank_today
-    FROM scored WHERE category = 'Bas'
-    ORDER BY score_final DESC
-    LIMIT 6
+    FROM (
+        SELECT *, ROW_NUMBER() OVER (PARTITION BY user_id ORDER BY score_final DESC) AS rn
+        FROM scored WHERE category = 'Bas'
+    ) t WHERE rn <= 6
 ),
 
 best_shoes AS (
     SELECT *, 3 AS rank_today
-    FROM scored WHERE category = 'Chaussures'
-    ORDER BY score_final DESC
-    LIMIT 6
+    FROM (
+        SELECT *, ROW_NUMBER() OVER (PARTITION BY user_id ORDER BY score_final DESC) AS rn
+        FROM scored WHERE category = 'Chaussures'
+    ) t WHERE rn <= 6
 ),
 
 final AS (
