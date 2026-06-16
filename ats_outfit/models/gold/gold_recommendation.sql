@@ -1,7 +1,7 @@
 -- ============================================
 -- GOLD - Recommendation Engine
 -- 1 Haut + 1 Bas + 1 Chaussure
--- Scoring : météo + formalité + couleur + matière
+-- Scoring : météo + formalité + couleur + matière + préférences user
 -- ============================================
 
 WITH wardrobe AS (
@@ -29,6 +29,29 @@ recent_recs AS (
     SELECT DISTINCT nom_vetement
     FROM public.historique_recommandations
     WHERE date_recommandation >= CURRENT_DATE - INTERVAL '3 days'
+),
+
+-- ── Apprentissage par utilisateur ─────────────────────────────────────────────
+-- Vêtements aimés (signal = +1)
+liked AS (
+    SELECT
+        user_id,
+        nom_vetement,
+        COUNT(*) AS nb_likes
+    FROM public.retours
+    WHERE signal = 1
+    GROUP BY user_id, nom_vetement
+),
+
+-- Vêtements refusés (signal = -1)
+disliked AS (
+    SELECT
+        user_id,
+        nom_vetement,
+        COUNT(*) AS nb_dislikes
+    FROM public.retours
+    WHERE signal = -1
+    GROUP BY user_id, nom_vetement
 ),
 
 scoring AS (
@@ -71,13 +94,13 @@ scoring AS (
 
         -- Score couleur selon température
         CASE
-            WHEN wt.temp_avg >= 20 AND w.color IN ('Blanc', 'Beige', 'Gris', 'Camel') THEN 1.0
-            WHEN wt.temp_avg >= 20 AND w.color IN ('Bleu', 'Vert', 'Kaki')            THEN 0.7
-            WHEN wt.temp_avg >= 20 AND w.color IN ('Marine', 'Bordeaux', 'Rouge')     THEN 0.5
-            WHEN wt.temp_avg >= 20 AND w.color = 'Noir'                               THEN 0.3
-            WHEN wt.temp_avg < 12 AND w.color IN ('Noir', 'Marine', 'Bordeaux')       THEN 1.0
-            WHEN wt.temp_avg < 12 AND w.color IN ('Gris', 'Marron', 'Kaki')           THEN 0.8
-            WHEN wt.temp_avg < 12 AND w.color IN ('Blanc', 'Beige', 'Camel')          THEN 0.6
+            WHEN wt.temp_avg >= 20 AND w.color IN ('Blanc', 'Beige', 'Gris', 'Camel', 'Crème') THEN 1.0
+            WHEN wt.temp_avg >= 20 AND w.color IN ('Bleu', 'Bleu ciel', 'Vert', 'Kaki')        THEN 0.7
+            WHEN wt.temp_avg >= 20 AND w.color IN ('Marine', 'Bordeaux', 'Rose', 'Violet')     THEN 0.5
+            WHEN wt.temp_avg >= 20 AND w.color = 'Noir'                                         THEN 0.3
+            WHEN wt.temp_avg < 12 AND w.color IN ('Noir', 'Marine', 'Bordeaux', 'Violet')      THEN 1.0
+            WHEN wt.temp_avg < 12 AND w.color IN ('Gris', 'Marron', 'Kaki', 'Taupe')           THEN 0.8
+            WHEN wt.temp_avg < 12 AND w.color IN ('Blanc', 'Beige', 'Camel', 'Crème')          THEN 0.6
             ELSE 0.7
         END AS color_score,
 
@@ -94,30 +117,50 @@ scoring AS (
             ELSE 0.7
         END AS material_score,
 
-        0.5 AS preference_score,
+        -- ── Score préférence utilisateur ──────────────────────────────────────
+        -- Bonus si l'utilisateur a déjà aimé ce vêtement
+        CASE
+            WHEN l.nb_likes >= 3 THEN 0.30   -- Très aimé → gros bonus
+            WHEN l.nb_likes = 2  THEN 0.20   -- Bien aimé → bonus moyen
+            WHEN l.nb_likes = 1  THEN 0.10   -- Aimé une fois → petit bonus
+            ELSE 0.0
+        END AS preference_bonus,
 
+        -- Pénalité si l'utilisateur a refusé ce vêtement
+        CASE
+            WHEN d.nb_dislikes >= 3 THEN 0.50  -- Très refusé → gros malus
+            WHEN d.nb_dislikes = 2  THEN 0.35  -- Refusé 2 fois → malus moyen
+            WHEN d.nb_dislikes = 1  THEN 0.20  -- Refusé une fois → petit malus
+            ELSE 0.0
+        END AS preference_penalty,
+
+        -- Pénalité récence (déjà recommandé dans les 3 derniers jours)
         CASE WHEN r.nom_vetement IS NOT NULL THEN 0.3 ELSE 0.0 END AS recency_penalty
 
-FROM wardrobe w
-CROSS JOIN weather wt
-JOIN calendar cal ON cal.user_id = w.user_id
-    AND cal.event_date = (
-        SELECT MIN(event_date) 
-        FROM {{ ref('stg_calendar') }} 
-        WHERE user_id = w.user_id 
-        AND event_date >= CURRENT_DATE
-    )
-LEFT JOIN recent_recs r ON w.item_name = r.nom_vetement
+    FROM wardrobe w
+    CROSS JOIN weather wt
+    JOIN calendar cal ON cal.user_id = w.user_id
+        AND cal.event_date = (
+            SELECT MIN(event_date)
+            FROM {{ ref('stg_calendar') }}
+            WHERE user_id = w.user_id
+            AND event_date >= CURRENT_DATE
+        )
+    LEFT JOIN recent_recs r      ON w.item_name = r.nom_vetement
+    LEFT JOIN liked l            ON w.item_name = l.nom_vetement AND w.user_id = l.user_id
+    LEFT JOIN disliked d         ON w.item_name = d.nom_vetement AND w.user_id = d.user_id
 ),
 
 scored AS (
     SELECT
         *,
         ROUND(CAST(
-            (warmth_match_score   * 0.30) +
-            (formality_match_score * 0.30) +
-            (color_score          * 0.20) +
-            (material_score       * 0.20) -
+            (warmth_match_score    * 0.25) +
+            (formality_match_score * 0.25) +
+            (color_score           * 0.15) +
+            (material_score        * 0.15) +
+            preference_bonus             -
+            preference_penalty           -
             recency_penalty
         AS NUMERIC), 4) AS score_final
     FROM scoring
@@ -175,7 +218,8 @@ SELECT
     formality_match_score,
     color_score,
     material_score,
-    preference_score,
+    preference_bonus,
+    preference_penalty,
     recency_penalty,
     score_final,
     rank_today,
