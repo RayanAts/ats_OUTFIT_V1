@@ -5,28 +5,36 @@ import pandas as pd
 from connector import run_query
 from datetime import datetime, timedelta
 
+from connector import get_supabase
+
+supabase = get_supabase()
+
 def get_top_recommendations(offset=0, user_id=1):
-    query = f"""
-        WITH ranked AS (
-            SELECT
-                item_id, item_name, category, subcategory,
-                color, material, warmth_level, formality_level,
-                score_final, rank_today, weather_label,
-                temp_avg, context_label, formality_required,
-                warmth_match_score, formality_match_score,
-                preference_bonus, preference_penalty,
-                ROW_NUMBER() OVER (
-                    PARTITION BY category
-                    ORDER BY score_final DESC
-                ) AS rn
-            FROM public.gold_recommendation
-            WHERE user_id = {user_id}
-        )
-        SELECT * FROM ranked
-        WHERE rn = {offset + 1}
-        ORDER BY rank_today
-    """
-    return run_query(query)
+    """Récupère les top recommandations par catégorie pour l'utilisateur"""
+    try:
+        # Récupère les top 50 items classés par score
+        result = supabase.table("gold_recommendation") \
+            .select("*") \
+            .eq("user_id", user_id) \
+            .order("score_final", desc=True) \
+            .limit(50) \
+            .execute()
+        
+        df = pd.DataFrame(result.data)
+        
+        if df.empty:
+            return df
+        
+        # Ranking par catégorie (top 1 par catégorie)
+        ranked = df.groupby("category").apply(
+            lambda x: x.nsmallest(offset + 1, "score_final")
+        ).reset_index(drop=True)
+        
+        return ranked[ranked.groupby("category").cumcount() == offset]
+        
+    except Exception as e:
+        print(f"❌ Erreur : {e}")
+        return pd.DataFrame()
 
 def get_recommendation_date(user_id=1):
     query = f"""
