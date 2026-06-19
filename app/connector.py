@@ -18,15 +18,22 @@ def get_supabase():
     return supabase
 
 def run_query(query: str) -> pd.DataFrame:
-    from sqlalchemy import create_engine
-    password = os.getenv("SUPABASE_DB_PASSWORD")
-    engine = create_engine(
-        f"postgresql://postgres.wvqntpaovovtpwxunkxd:{password}@aws-1-eu-central-1.pooler.supabase.com:6543/postgres",
-        connect_args={"sslmode": "require"}
-    )
-    with engine.connect() as conn:
-        df = pd.read_sql(query, conn)
-    return df
+    """Exécute une requête SQL via RPC Supabase"""
+    try:
+        # Utilise une fonction Supabase pour exécuter le SQL
+        result = supabase.rpc("execute_query", {"sql_query": query}).execute()
+        if result.data:
+            return pd.DataFrame(result.data)
+        else:
+            return pd.DataFrame()
+    except Exception as e:
+        print(f"❌ Erreur RPC : {e}")
+        # Fallback : essayer de récupérer directement depuis gold_recommendation
+        try:
+            data = supabase.table("gold_recommendation").select("*").execute()
+            return pd.DataFrame(data.data)
+        except:
+            return pd.DataFrame()
 
 def test_connection():
     try:
