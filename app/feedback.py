@@ -6,7 +6,8 @@ from datetime import datetime
 from dotenv import load_dotenv
 from supabase import create_client
 
-load_dotenv(r"C:\Projects\smartwardrobe\.env")
+from pathlib import Path
+load_dotenv(Path(__file__).parent.parent / ".env")
 
 supabase = create_client(
     os.getenv("SUPABASE_URL"),

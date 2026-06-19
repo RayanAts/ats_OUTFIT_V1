@@ -14,7 +14,7 @@ def get_top_recommendations(offset=0, user_id=1):
                 score_final, rank_today, weather_label,
                 temp_avg, context_label, formality_required,
                 warmth_match_score, formality_match_score,
-                preference_score,
+                preference_bonus, preference_penalty,
                 ROW_NUMBER() OVER (
                     PARTITION BY category
                     ORDER BY score_final DESC

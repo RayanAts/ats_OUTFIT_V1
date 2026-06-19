@@ -9,7 +9,8 @@ from datetime import datetime
 import subprocess
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-load_dotenv(r"C:\Projects\smartwardrobe\.env")
+from pathlib import Path
+load_dotenv(Path(__file__).parent.parent / ".env")
 
 supabase = create_client(os.getenv("SUPABASE_URL"), os.getenv("SUPABASE_KEY"))
 
@@ -422,14 +423,7 @@ elif st.session_state.onb_step == 4:
             with st.spinner(f"Enregistrement de {len(records)} vêtements..."):
                 supabase.table("vetements").insert(records).execute()
 
-            with st.spinner("Calcul de tes premières recommandations..."):
-                subprocess.run(
-                    [r"C:\Projects\smartwardrobe\dbt-env\Scripts\dbt.exe", "run"],
-                    cwd=r"C:\Projects\smartwardrobe\ats_outfit",
-                    capture_output=True
-                )
-
-            st.success(f"✅ {len(records)} vêtements ajoutés — recommandations prêtes !")
+            st.success(f"✅ {len(records)} vêtements ajoutés !")
             st.session_state.onb_step         = 1
             st.session_state.onb_selections   = []
             st.session_state.onb_current_item = None

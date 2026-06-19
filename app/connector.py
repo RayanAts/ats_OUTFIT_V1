@@ -6,7 +6,8 @@ import pandas as pd
 from supabase import create_client
 from dotenv import load_dotenv
 
-load_dotenv(r"C:\Projects\smartwardrobe\.env")
+from pathlib import Path
+load_dotenv(Path(__file__).parent.parent / ".env")
 
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_KEY = os.getenv("SUPABASE_KEY")

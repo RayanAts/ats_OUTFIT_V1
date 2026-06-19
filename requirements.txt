@@ -1,0 +1,6 @@
+streamlit==1.56.0
+supabase==2.31.0
+pandas==3.0.2
+requests==2.33.1
+python-dotenv==1.2.2
+anthropic==0.102.0

@@ -3,10 +3,11 @@
 # ============================================
 import os
 from datetime import datetime
+from pathlib import Path
 from dotenv import load_dotenv
 from supabase import create_client
 
-load_dotenv(r"C:\Projects\smartwardrobe\.env")
+load_dotenv(Path(__file__).parent.parent / ".env")
 
 supabase = create_client(
     os.getenv("SUPABASE_URL"),
@@ -15,10 +16,9 @@ supabase = create_client(
 
 def upload_new_item(item_dict: dict, filename: str = None):
     """
-    Insère un vêtement directement dans Supabase + relance dbt
+    Insère un vêtement directement dans Supabase
+    (dbt tourne automatiquement via GitHub Actions toutes les 6h)
     """
-    import subprocess
-
     record = {
         "item_name":       item_dict.get("item_name"),
         "category":        item_dict.get("category"),
@@ -36,15 +36,7 @@ def upload_new_item(item_dict: dict, filename: str = None):
 
     result = supabase.table("vetements").insert(record).execute()
     print(f"✅ Vêtement ajouté : {record['item_name']} (user_id={record['user_id']})")
-
-    # Relancer dbt automatiquement
-    print("🔄 Recalcul des recommandations...")
-    subprocess.run(
-        [r"C:\Projects\smartwardrobe\dbt-env\Scripts\dbt.exe", "run"],
-        cwd=r"C:\Projects\smartwardrobe\ats_outfit",
-        capture_output=True
-    )
-    print("✅ Recommandations mises à jour !")
+    print("⏳ Les recommandations seront mises à jour automatiquement dans la prochaine exécution dbt (toutes les 6h)")
 
     return result
 

@@ -6,7 +6,8 @@ import os
 from supabase import create_client
 from dotenv import load_dotenv
 
-load_dotenv(r"C:\Projects\smartwardrobe\.env")
+from pathlib import Path
+load_dotenv(Path(__file__).parent.parent / ".env")
 supabase = create_client(os.getenv("SUPABASE_URL"), os.getenv("SUPABASE_KEY"))
 
 def require_auth():
