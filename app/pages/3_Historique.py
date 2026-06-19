@@ -8,8 +8,9 @@ from collections import Counter, defaultdict
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from styles import GLOBAL_CSS
-from recommender import run_query
 from auth import require_wardrobe
+from connector import get_supabase
+supabase = get_supabase()
 
 USER_ID = require_wardrobe()
 
@@ -27,26 +28,41 @@ st.markdown("""
 # ── Chargement depuis Supabase ────────────────────────────────────────────────
 @st.cache_data(ttl=30)
 def load_feedbacks(user_id):
-    df = run_query(f"""
-        SELECT nom_vetement AS item_name,
-               signal,
-               type_contexte AS context_type,
-               temp_moyenne  AS temp_avg,
-               cree_le::DATE::TEXT AS feedback_date
-        FROM public.retours
-        WHERE user_id = {user_id}
-        ORDER BY cree_le DESC
-    """)
-    return df.to_dict('records') if len(df) > 0 else []
+    try:
+        result = supabase.table("retours") \
+            .select("nom_vetement, signal, type_contexte, temp_moyenne, cree_le") \
+            .eq("user_id", user_id) \
+            .order("cree_le", desc=True) \
+            .execute()
+        
+        if result.data:
+            return [
+                {
+                    "item_name": r["nom_vetement"],
+                    "signal": r["signal"],
+                    "context_type": r["type_contexte"],
+                    "temp_avg": r["temp_moyenne"],
+                    "feedback_date": str(r["cree_le"]).split(" ")[0]  # Extracte la date
+                }
+                for r in result.data
+            ]
+        return []
+    except Exception as e:
+        print(f"❌ Erreur load_feedbacks: {e}")
+        return []
 
 @st.cache_data(ttl=30)
 def load_wardrobe(user_id):
-    return run_query(f"""
-        SELECT item_name, category, color, material,
-               warmth_level, formality_level
-        FROM public.stg_wardrobe
-        WHERE user_id = {user_id}
-    """)
+    try:
+        result = supabase.table("stg_wardrobe") \
+            .select("item_name, category, color, material, warmth_level, formality_level") \
+            .eq("user_id", user_id) \
+            .execute()
+        
+        return pd.DataFrame(result.data) if result.data else pd.DataFrame()
+    except Exception as e:
+        print(f"❌ Erreur load_wardrobe: {e}")
+        return pd.DataFrame()
 
 feedbacks = load_feedbacks(USER_ID)
 wardrobe  = load_wardrobe(USER_ID)

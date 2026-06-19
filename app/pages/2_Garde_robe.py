@@ -6,10 +6,11 @@ import sys, os
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from styles import GLOBAL_CSS
-from recommender import run_query
 
 from auth import require_wardrobe
 USER_ID = require_wardrobe()
+from connector import get_supabase
+supabase = get_supabase()
 
 st.set_page_config(page_title="Garde-robe · SmartWardrobe", page_icon="👔", layout="centered")
 st.markdown(GLOBAL_CSS, unsafe_allow_html=True)
@@ -25,14 +26,18 @@ st.markdown("""
 # ── Chargement ────────────────────────────────────────────────────────────────
 @st.cache_data(ttl=30)
 def load_wardrobe(user_id):
-    return run_query(f"""
-        SELECT item_id, item_name, category, subcategory,
-               color, material, warmth_level, formality_level,
-               season, condition, is_active
-        FROM public.stg_wardrobe
-        WHERE user_id = {user_id}
-        ORDER BY category, formality_level DESC
-    """)
+    try:
+        result = supabase.table("stg_wardrobe") \
+            .select("item_id, item_name, category, subcategory, color, material, warmth_level, formality_level, season, condition, is_active") \
+            .eq("user_id", user_id) \
+            .order("category", desc=False) \
+            .order("formality_level", desc=True) \
+            .execute()
+        
+        return pd.DataFrame(result.data) if result.data else pd.DataFrame()
+    except Exception as e:
+        print(f"❌ Erreur load_wardrobe: {e}")
+        return pd.DataFrame()
 
 df = load_wardrobe(USER_ID)
 

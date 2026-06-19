@@ -14,9 +14,11 @@ env_path = Path(__file__).parent.parent / ".env"
 load_dotenv(env_path)
 
 from styles import GLOBAL_CSS
-from recommender import get_top_recommendations, get_weather_context, get_calendar_context, get_tomorrow_context, run_query
+from recommender import get_top_recommendations, get_weather_context, get_calendar_context, get_tomorrow_context
 from feedback import save_feedback
 from auth import require_wardrobe
+from connector import get_supabase
+supabase = get_supabase()
 
 USER_ID = require_wardrobe()
 
@@ -66,14 +68,20 @@ def get_color(color_name):
 
 def get_recommendation_date(user_id=1):
     try:
-        result = run_query(f"""
-            SELECT recommendation_date FROM public.gold_recommendation
-            WHERE user_id = {user_id}
-            ORDER BY recommendation_date DESC LIMIT 1
-        """)
-        return str(result.iloc[0]['recommendation_date']) if len(result) > 0 else None
-    except:
+        result = supabase.table("gold_recommendation") \
+            .select("recommendation_date") \
+            .eq("user_id", user_id) \
+            .order("recommendation_date", desc=True) \
+            .limit(1) \
+            .execute()
+        
+        return str(result.data[0]['recommendation_date']) if result.data else None
+    except Exception as e:
+        print(f"❌ Erreur: {e}")
         return None
+    
+
+
 
 # ── Avatar Apple-style ────────────────────────────────────────────────────────
 def generate_avatar_apple(recs_data, vibe_emoji="", vibe_label=""):

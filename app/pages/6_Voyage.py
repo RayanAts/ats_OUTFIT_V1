@@ -2,14 +2,18 @@
 # PAGE 6 - Mode Voyage
 # ============================================
 import streamlit as st
+from connector import get_supabase
+supabase = get_supabase()
 import sys
 import os
 import requests
 import time
 import math
 from datetime import datetime, timedelta
+import pandas as pd
 from dotenv import load_dotenv
 from supabase import create_client
+
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from pathlib import Path
@@ -17,7 +21,7 @@ load_dotenv(Path(__file__).parent.parent / ".env")
 
 from styles import GLOBAL_CSS
 from auth import require_auth
-from recommender import run_query
+
 
 supabase = create_client(os.getenv("SUPABASE_URL"), os.getenv("SUPABASE_KEY"))
 
@@ -150,50 +154,57 @@ def get_meteo_voyage(lat, lon, d_depart, d_retour):
 
 def suggerer_essentiel(user_id, temp_avg, nb_jours):
     """Sélection proportionnelle à la durée du voyage"""
-    if temp_avg >= 22:
-        warmth_target = "warmth_level <= 2"
-    elif temp_avg >= 14:
-        warmth_target = "warmth_level <= 3"
-    else:
-        warmth_target = "warmth_level >= 3"
+    try:
+        if temp_avg >= 22:
+            warmth_target = [1, 2]
+        elif temp_avg >= 14:
+            warmth_target = [1, 2, 3]
+        else:
+            warmth_target = [3, 4, 5]
 
-    # Quotas dynamiques selon la durée
-    # Hauts : ~1 tous les 1.5 jours · Bas : ~1 tous les 3 jours · Chaussures : 1-3
-    nb_hauts = max(2, math.ceil(nb_jours / 1.5))
-    nb_bas   = max(1, math.ceil(nb_jours / 3))
-    nb_shoes = 1 if nb_jours <= 4 else (2 if nb_jours <= 10 else 3)
-    quotas = {"Haut": nb_hauts, "Bas": nb_bas, "Chaussures": nb_shoes}
+        # Quotas dynamiques selon la durée
+        nb_hauts = max(2, math.ceil(nb_jours / 1.5))
+        nb_bas   = max(1, math.ceil(nb_jours / 3))
+        nb_shoes = 1 if nb_jours <= 4 else (2 if nb_jours <= 10 else 3)
+        quotas = {"Haut": nb_hauts, "Bas": nb_bas, "Chaussures": nb_shoes}
 
-    liked = run_query(f"""
-        SELECT DISTINCT nom_vetement FROM public.retours
-        WHERE user_id = {user_id} AND signal = 1
-    """)
-    liked_names = set(liked['nom_vetement'].tolist()) if len(liked) > 0 else set()
+        # Récupère les items likés
+        liked_result = supabase.table("retours") \
+            .select("nom_vetement") \
+            .eq("user_id", user_id) \
+            .eq("signal", 1) \
+            .execute()
+        liked_names = set(r["nom_vetement"] for r in liked_result.data) if liked_result.data else set()
 
-    selection = []
-    for cat, quota in quotas.items():
-        items = run_query(f"""
-            SELECT item_id, item_name, category, warmth_level
-            FROM public.stg_wardrobe
-            WHERE user_id = {user_id} AND category = '{cat}' AND {warmth_target}
-            ORDER BY item_id
-        """)
-        if len(items) == 0:
-            items = run_query(f"""
-                SELECT item_id, item_name, category, warmth_level
-                FROM public.stg_wardrobe
-                WHERE user_id = {user_id} AND category = '{cat}'
-                ORDER BY item_id
-            """)
-        if len(items) == 0:
-            continue
-        items['is_liked'] = items['item_name'].apply(lambda n: n in liked_names)
-        items = items.sort_values('is_liked', ascending=False)
-        for _, row in items.head(quota).iterrows():
-            selection.append(int(row['item_id']))
-    return selection
-
-jours_fr = {0: "Lun", 1: "Mar", 2: "Mer", 3: "Jeu", 4: "Ven", 5: "Sam", 6: "Dim"}
+        selection = []
+        for cat, quota in quotas.items():
+            # Essaie d'abord avec le warmth_target
+            items_result = supabase.table("stg_wardrobe") \
+                .select("item_id, item_name, category, warmth_level") \
+                .eq("user_id", user_id) \
+                .eq("category", cat) \
+                .execute()
+            
+            items = [r for r in items_result.data if r["warmth_level"] in warmth_target] if items_result.data else []
+            
+            # Si pas d'items avec warmth_target, prend tout
+            if not items and items_result.data:
+                items = items_result.data
+            
+            if not items:
+                continue
+            
+            # Sort par liked items en priorité
+            items_sorted = sorted(items, key=lambda x: x["item_name"] in liked_names, reverse=True)
+            
+            for item in items_sorted[:quota]:
+                selection.append(int(item["item_id"]))
+        
+        return selection
+    except Exception as e:
+        print(f"❌ Erreur suggerer_essentiel: {e}")
+        return []
+    
 def fmt_jour(date_str):
     try:
         d = datetime.strptime(date_str, "%Y-%m-%d")
@@ -349,12 +360,18 @@ elif st.session_state.voyage_step == 2:
         unsafe_allow_html=True
     )
 
-    wardrobe = run_query(f"""
-        SELECT item_id, item_name, category, color, material
-        FROM public.stg_wardrobe
-        WHERE user_id = {USER_ID}
-        ORDER BY category, item_name
-    """)
+    try:
+        wardrobe_result = supabase.table("stg_wardrobe") \
+            .select("item_id, item_name, category, color, material") \
+            .eq("user_id", USER_ID) \
+            .order("category", desc=False) \
+            .order("item_name", desc=False) \
+            .execute()
+        
+        wardrobe = pd.DataFrame(wardrobe_result.data) if wardrobe_result.data else pd.DataFrame()
+    except Exception as e:
+        print(f"❌ Erreur wardrobe: {e}")
+        wardrobe = pd.DataFrame()
 
     if st.button("✨ Suggère-moi l'essentiel", use_container_width=True, type="primary"):
         temp = meteo['temp_avg'] if meteo else 18
