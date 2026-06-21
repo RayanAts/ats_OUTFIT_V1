@@ -2,14 +2,13 @@
 # PAGE 1 - Recommandation du jour — Apple Style
 # ============================================
 import streamlit as st
-import sys, os, random
+import sys, os
 from dotenv import load_dotenv
 from datetime import datetime
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from pathlib import Path
 
-# Au lieu de chemin absolu
 env_path = Path(__file__).parent.parent / ".env"
 load_dotenv(env_path)
 
@@ -18,6 +17,8 @@ from recommender import get_top_recommendations, get_weather_context, get_calend
 from feedback import save_feedback
 from auth import require_wardrobe
 from connector import get_supabase
+import pandas as pd
+
 supabase = get_supabase()
 
 USER_ID = require_wardrobe()
@@ -74,14 +75,49 @@ def get_recommendation_date(user_id=1):
             .order("recommendation_date", desc=True) \
             .limit(1) \
             .execute()
-        
         return str(result.data[0]['recommendation_date']) if result.data else None
     except Exception as e:
         print(f"❌ Erreur: {e}")
         return None
-    
 
+# ── Charger les 6 tenues du jour ──────────────────────────────────────────────
+def load_all_tenues(user_id):
+    """Charge toutes les recommandations et construit 6 tenues (top 1 à 6 par catégorie)"""
+    try:
+        result = supabase.table("gold_recommendation") \
+            .select("*") \
+            .eq("user_id", user_id) \
+            .order("score_final", desc=True) \
+            .execute()
 
+        if not result.data:
+            return []
+
+        df = pd.DataFrame(result.data)
+        categories = df["category"].unique()
+
+        # Compter combien de tenues on peut faire (min d'items par catégorie, max 6)
+        max_tenues = 6
+        for cat in categories:
+            cat_count = len(df[df["category"] == cat])
+            max_tenues = min(max_tenues, cat_count)
+
+        # Construire les tenues
+        tenues = []
+        for offset in range(max_tenues):
+            picks = []
+            for cat in categories:
+                cat_df = df[df["category"] == cat].sort_values("score_final", ascending=False).reset_index(drop=True)
+                if offset < len(cat_df):
+                    picks.append(cat_df.iloc[offset].to_dict())
+            if picks:
+                tenues.append(picks)
+
+        return tenues
+
+    except Exception as e:
+        print(f"❌ Erreur load_all_tenues: {e}")
+        return []
 
 # ── Avatar Apple-style ────────────────────────────────────────────────────────
 def generate_avatar_apple(recs_data, vibe_emoji="", vibe_label=""):
@@ -155,15 +191,46 @@ def generate_avatar_apple(recs_data, vibe_emoji="", vibe_label=""):
         '</div>'
     )
 
+# ── Mini-card pour le récap ───────────────────────────────────────────────────
+def generate_mini_card(tenue_data, tenue_num):
+    """Génère une mini-card HTML pour le récap des 6 tenues"""
+    cat_emojis = {"Haut": "👕", "Bas": "👖", "Chaussures": "👟"}
+    items_html = ""
+    for item in tenue_data:
+        emoji = cat_emojis.get(item.get("category", ""), "👔")
+        color_dot = get_color(item.get("color", ""))
+        name = str(item.get("item_name", ""))[:20]
+        items_html += (
+            f'<div style="display:flex;align-items:center;gap:6px;margin-bottom:4px">'
+            f'<div style="width:8px;height:8px;border-radius:3px;background:{color_dot};flex-shrink:0"></div>'
+            f'<span style="font-size:11px;color:#1C1C1E">{emoji} {name}</span>'
+            f'</div>'
+        )
+
+    score_avg = 0
+    for item in tenue_data:
+        score_avg += float(item.get("score_final", 0))
+    if tenue_data:
+        score_avg = int((score_avg / len(tenue_data)) * 100)
+
+    return (
+        f'<div style="background:white;border-radius:14px;padding:12px;'
+        f'border:0.5px solid rgba(0,0,0,0.08);height:100%">'
+        f'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">'
+        f'<span style="font-size:12px;font-weight:600;color:#1C1C1E">Tenue {tenue_num}</span>'
+        f'<span style="font-size:10px;background:#F2F2F7;color:#3A3A3C;padding:2px 8px;border-radius:10px">{score_avg}%</span>'
+        f'</div>'
+        f'{items_html}'
+        f'</div>'
+    )
+
 # ── Score Vibe ────────────────────────────────────────────────────────────────
 def get_vibe_score(recs_data):
     NEUTRES = ["Blanc", "Beige", "Gris", "Camel", "Crème", "Taupe"]
     VIFS    = ["Bleu", "Vert", "Rouge", "Kaki", "Orange", "Violet", "Rose", "Jaune"]
-
     couleurs = [item.get("color", "").split(" / ")[0] for item in recs_data]
     nb_neutres = sum(1 for c in couleurs if c in NEUTRES)
     nb_vifs    = sum(1 for c in couleurs if c in VIFS)
-
     if nb_neutres == 3:   return "✅", "Safe"
     elif nb_neutres == 2: return "👌", "Clean"
     elif nb_vifs >= 3:    return "⚠️", "Attention"
@@ -192,17 +259,26 @@ DEMAIN_CONSEILS = {
 }
 
 # ── State ─────────────────────────────────────────────────────────────────────
-if 'feedback_sent'      not in st.session_state: st.session_state.feedback_sent      = False
-if 'accepted'           not in st.session_state: st.session_state.accepted           = False
-if 'alternative_count'  not in st.session_state: st.session_state.alternative_count  = 0
+if 'feedback_sent'     not in st.session_state: st.session_state.feedback_sent     = False
+if 'accepted'          not in st.session_state: st.session_state.accepted          = False
+if 'alternative_count' not in st.session_state: st.session_state.alternative_count = 0
+if 'seen_all'          not in st.session_state: st.session_state.seen_all          = False
+if 'all_tenues'        not in st.session_state: st.session_state.all_tenues        = None
 
 # ── Chargement ────────────────────────────────────────────────────────────────
 with st.spinner(""):
     weather   = get_weather_context()
     calendar  = get_calendar_context(user_id=USER_ID)
-    recs      = get_top_recommendations(offset=st.session_state.alternative_count, user_id=USER_ID)
     reco_date = get_recommendation_date(user_id=USER_ID)
     tomorrow  = get_tomorrow_context(user_id=USER_ID)
+
+    # Charger les 6 tenues une seule fois
+    if st.session_state.all_tenues is None:
+        st.session_state.all_tenues = load_all_tenues(user_id=USER_ID)
+
+all_tenues   = st.session_state.all_tenues
+nb_tenues    = len(all_tenues)
+current_idx  = st.session_state.alternative_count
 
 NOM          = st.session_state.get('nom', '')
 initiale     = NOM[0].upper() if NOM else '?'
@@ -275,32 +351,39 @@ with col2:
 st.markdown("<br>", unsafe_allow_html=True)
 
 # ══════════════════════════════════════════════════════════════════════════════
-# BLOC RECOMMANDATION
+# PHASE 1 : EXPLORATION DES TENUES (pas de feedback)
 # ══════════════════════════════════════════════════════════════════════════════
-if not st.session_state.feedback_sent:
+if not st.session_state.feedback_sent and not st.session_state.seen_all:
 
-    recs_data = [
-        {"category": row["category"], "color": row["color"], "item_name": row["item_name"]}
-        for _, row in recs.iterrows()
-    ]
-
-    if len(recs_data) == 0:
+    if nb_tenues == 0:
         st.warning("⚠️ Aucune recommandation trouvée")
     else:
-        vibe_emoji, vibe_label = get_vibe_score(recs_data)
-        st.markdown(generate_avatar_apple(recs_data, vibe_emoji, vibe_label), unsafe_allow_html=True)
+        # Tenue actuelle
+        current_tenue = all_tenues[current_idx]
+
+        # Compteur de tenues
+        st.markdown(
+            f'<div style="text-align:center;margin-bottom:8px">'
+            f'<span style="font-size:12px;color:#8E8E93;font-weight:500">Tenue {current_idx + 1} / {nb_tenues}</span>'
+            f'</div>',
+            unsafe_allow_html=True
+        )
+
+        # Avatar
+        vibe_emoji, vibe_label = get_vibe_score(current_tenue)
+        st.markdown(generate_avatar_apple(current_tenue, vibe_emoji, vibe_label), unsafe_allow_html=True)
 
         # Score IA par vêtement
         cat_emojis = {"Haut": "👕", "Bas": "👖", "Chaussures": "👟"}
         rows_html = ""
-        for _, row in recs.iterrows():
-            score_pct = int(float(row['score_final']) * 100)
-            emoji     = cat_emojis.get(row['category'], "👔")
+        for item in current_tenue:
+            score_pct = int(float(item['score_final']) * 100)
+            emoji     = cat_emojis.get(item['category'], "👔")
             rows_html += (
                 '<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:0.5px solid rgba(0,0,0,0.05)">'
                 '<div style="flex:1">'
-                f'<p style="font-size:13px;font-weight:500;color:#1C1C1E;margin:0">{emoji} {row["item_name"]}</p>'
-                f'<p style="font-size:11px;color:#8E8E93;margin:1px 0 0">{row["category"]} · {row["color"]}</p>'
+                f'<p style="font-size:13px;font-weight:500;color:#1C1C1E;margin:0">{emoji} {item["item_name"]}</p>'
+                f'<p style="font-size:11px;color:#8E8E93;margin:1px 0 0">{item["category"]} · {item["color"]}</p>'
                 '<div style="height:3px;background:#E5E5EA;border-radius:2px;margin-top:5px;overflow:hidden">'
                 f'<div style="height:3px;width:{score_pct}%;background:#1C1C1E;border-radius:2px"></div>'
                 '</div></div>'
@@ -334,75 +417,122 @@ if not st.session_state.feedback_sent:
                 unsafe_allow_html=True
             )
 
-    # Boutons action
-    col_alt, col_yes, col_no = st.columns([1, 1.5, 1])
+        # ── Boutons : J'accepte + Autre ──────────────────────────────────────
+        col_yes, col_alt = st.columns([1.5, 1])
 
-    with col_alt:
-        if st.button("🔄 Autre", use_container_width=True, type="secondary"):
-            st.session_state.alternative_count += 1
-            st.cache_data.clear()
-            st.rerun()
+        with col_yes:
+            if st.button("✓ J'accepte", use_container_width=True, type="primary"):
+                # Feedback +1 pour la tenue choisie
+                for item in current_tenue:
+                    save_feedback(
+                        item_id=int(item.get('rank_today', item.get('item_id', 0))),
+                        item_name=item['item_name'],
+                        signal=1,
+                        context_type=calendar['context_type'],
+                        temp_avg=float(temp_display),
+                        weathercode=0
+                    )
+                # Feedback -1 pour toutes les autres tenues
+                for i, tenue in enumerate(all_tenues):
+                    if i != current_idx:
+                        for item in tenue:
+                            save_feedback(
+                                item_id=int(item.get('rank_today', item.get('item_id', 0))),
+                                item_name=item['item_name'],
+                                signal=-1,
+                                context_type=calendar['context_type'],
+                                temp_avg=float(temp_display),
+                                weathercode=0
+                            )
+                st.session_state.feedback_sent = True
+                st.session_state.accepted = True
+                st.rerun()
 
-    with col_yes:
-        if st.button("✓ J'accepte", use_container_width=True, type="primary"):
-            for _, row in recs.iterrows():
-                save_feedback(
-                    item_id=int(row['rank_today']),
-                    item_name=row['item_name'],
-                    signal=1,
-                    context_type=calendar['context_type'],
-                    temp_avg=float(temp_display),
-                    weathercode=0
-                )
-            st.session_state.feedback_sent = True
-            st.session_state.accepted = True
-            st.rerun()
-
-    with col_no:
-        if st.button("✕ Refus", use_container_width=True, type="secondary"):
-            for _, row in recs.iterrows():
-                save_feedback(
-                    item_id=int(row['rank_today']),
-                    item_name=row['item_name'],
-                    signal=-1,
-                    context_type=calendar['context_type'],
-                    temp_avg=float(temp_display),
-                    weathercode=0
-                )
-            st.session_state.feedback_sent = True
-            st.session_state.accepted = False
-            st.rerun()
+        with col_alt:
+            if st.button("🔄 Autre", use_container_width=True, type="secondary"):
+                next_idx = current_idx + 1
+                if next_idx >= nb_tenues:
+                    # A vu toutes les tenues → passer au récap
+                    st.session_state.seen_all = True
+                else:
+                    st.session_state.alternative_count = next_idx
+                st.rerun()
 
 # ══════════════════════════════════════════════════════════════════════════════
-# BLOC POST-FEEDBACK
+# PHASE 2 : RÉCAP DES 6 TENUES (après avoir tout vu)
+# ══════════════════════════════════════════════════════════════════════════════
+elif st.session_state.seen_all and not st.session_state.feedback_sent:
+
+    st.markdown(
+        '<div style="background:linear-gradient(145deg,#F0EBF8,#E0D2F2);border-radius:16px;padding:16px;text-align:center;margin-bottom:16px">'
+        f'<p style="font-size:16px;font-weight:600;color:#3D1D6B;margin:0">Tu as vu les {nb_tenues} tenues du jour !</p>'
+        '<p style="font-size:13px;color:#6B3FA0;margin:4px 0 0">Choisis celle que tu portes aujourd\'hui 👇</p>'
+        '</div>',
+        unsafe_allow_html=True
+    )
+
+    # Afficher les mini-cards par rangées de 2
+    for row_start in range(0, nb_tenues, 2):
+        cols = st.columns(2)
+        for col_idx in range(2):
+            tenue_idx = row_start + col_idx
+            if tenue_idx < nb_tenues:
+                with cols[col_idx]:
+                    tenue = all_tenues[tenue_idx]
+                    st.markdown(generate_mini_card(tenue, tenue_idx + 1), unsafe_allow_html=True)
+                    if st.button(f"✓ Choisir tenue {tenue_idx + 1}", key=f"choose_{tenue_idx}", use_container_width=True, type="primary"):
+                        # Feedback +1 pour la tenue choisie
+                        for item in tenue:
+                            save_feedback(
+                                item_id=int(item.get('rank_today', item.get('item_id', 0))),
+                                item_name=item['item_name'],
+                                signal=1,
+                                context_type=calendar['context_type'],
+                                temp_avg=float(temp_display),
+                                weathercode=0
+                            )
+                        # Feedback -1 pour toutes les autres tenues
+                        for i, other_tenue in enumerate(all_tenues):
+                            if i != tenue_idx:
+                                for item in other_tenue:
+                                    save_feedback(
+                                        item_id=int(item.get('rank_today', item.get('item_id', 0))),
+                                        item_name=item['item_name'],
+                                        signal=-1,
+                                        context_type=calendar['context_type'],
+                                        temp_avg=float(temp_display),
+                                        weathercode=0
+                                    )
+                        st.session_state.feedback_sent = True
+                        st.session_state.accepted = True
+                        st.rerun()
+
+# ══════════════════════════════════════════════════════════════════════════════
+# PHASE 3 : TENUE VALIDÉE (fin de journée)
 # ══════════════════════════════════════════════════════════════════════════════
 else:
-    if st.session_state.accepted:
-        st.markdown(
-            '<div style="background:linear-gradient(145deg,#EAF7EE,#D1F0D8);border-radius:20px;padding:28px 20px;text-align:center;margin:8px 0 16px">'
-            '<div style="font-size:40px;margin-bottom:8px">✓</div>'
-            '<p style="font-size:18px;font-weight:600;color:#1A5C2A;margin:0 0 4px">Tenue validée !</p>'
-            '<p style="font-size:13px;color:#2E7D3A;margin:0">L\'IA retient ton choix et s\'améliore cette nuit.</p>'
-            '</div>',
-            unsafe_allow_html=True
-        )
-    else:
-        st.markdown(
-            '<div style="background:linear-gradient(145deg,#FFF3EE,#FFE4D5);border-radius:20px;padding:28px 20px;text-align:center;margin:8px 0 16px">'
-            '<div style="font-size:40px;margin-bottom:8px">↺</div>'
-            '<p style="font-size:18px;font-weight:600;color:#8B3A00;margin:0 0 4px">Noté !</p>'
-            '<p style="font-size:13px;color:#A04A00;margin:0">L\'IA proposera autre chose demain.</p>'
-            '</div>',
-            unsafe_allow_html=True
-        )
+    st.markdown(
+        '<div style="background:linear-gradient(145deg,#EAF7EE,#D1F0D8);border-radius:20px;padding:28px 20px;text-align:center;margin:8px 0 16px">'
+        '<div style="font-size:40px;margin-bottom:8px">✓</div>'
+        '<p style="font-size:18px;font-weight:600;color:#1A5C2A;margin:0 0 4px">Tenue validée !</p>'
+        '<p style="font-size:13px;color:#2E7D3A;margin:0">Bonne journée ! L\'IA retient ton choix et s\'améliore cette nuit.</p>'
+        '</div>',
+        unsafe_allow_html=True
+    )
 
-    best_score = int(float(recs['score_final'].max()) * 100)
+    # Stats
+    if nb_tenues > 0 and current_idx < nb_tenues:
+        chosen_tenue = all_tenues[min(current_idx, nb_tenues - 1)]
+        best_score = int(max(float(item.get('score_final', 0)) for item in chosen_tenue) * 100)
+    else:
+        best_score = 0
+
     col1, col2, col3 = st.columns(3)
     with col1:
         st.markdown(
             '<div style="background:white;border-radius:16px;padding:14px 10px;text-align:center;border:0.5px solid rgba(0,0,0,0.06)">'
-            f'<p style="font-size:22px;font-weight:600;color:#1C1C1E;margin:0">{len(recs)}</p>'
-            '<p style="font-size:11px;color:#8E8E93;margin:3px 0 0">Scorés</p></div>',
+            f'<p style="font-size:22px;font-weight:600;color:#1C1C1E;margin:0">{nb_tenues}</p>'
+            '<p style="font-size:11px;color:#8E8E93;margin:3px 0 0">Tenues vues</p></div>',
             unsafe_allow_html=True
         )
     with col2:
@@ -419,12 +549,6 @@ else:
             '<p style="font-size:11px;color:#8E8E93;margin:3px 0 0">Formalité /5</p></div>',
             unsafe_allow_html=True
         )
-
-    st.markdown("<br>", unsafe_allow_html=True)
-    if st.button("↺  Nouvelle recommandation", use_container_width=True, type="primary"):
-        st.session_state.feedback_sent = False
-        st.session_state.alternative_count = random.randint(1, 5)
-        st.rerun()
 
 # ── Navigation ────────────────────────────────────────────────────────────────
 st.markdown("<br>", unsafe_allow_html=True)

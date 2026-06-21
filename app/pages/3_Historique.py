@@ -10,6 +10,7 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from styles import GLOBAL_CSS
 from auth import require_wardrobe
 from connector import get_supabase
+import pandas as pd
 supabase = get_supabase()
 
 USER_ID = require_wardrobe()
